@@ -406,6 +406,34 @@ pub(crate) fn build_markers(
         .collect()
 }
 
+/// One `$WTT`/`$WTB` event anchor: a bow's string end or a melee weapon's trail edge. The event's
+/// position is the point at bind (on the shipped bows, the tip bone's pivot); the posed path needs
+/// it as an offset from that pivot, while a rigid prop draws the point itself.
+#[derive(Clone, Copy)]
+pub struct StringAnchor {
+    pub bone: u16,
+    /// Bevy-space model point at bind, the prop root's frame.
+    pub position: Vec3,
+    /// Bevy-space offset from [`Self::position`]'s bone pivot, which a pose turns about the bone.
+    pub offset: Vec3,
+}
+
+/// Bake the `$WTT`/`$WTB` pair like [`build_markers`]; `None` unless both bones exist.
+pub(crate) fn build_string_anchors(
+    anchors: benilla_formats::StringAnchors,
+    pivots: &[Vec3],
+) -> Option<[StringAnchor; 2]> {
+    fn one((bone, p): (u16, [f32; 3]), pivots: &[Vec3]) -> Option<StringAnchor> {
+        let position = wow_to_bevy(p);
+        Some(StringAnchor {
+            bone,
+            position,
+            offset: position - *pivots.get(bone as usize)?,
+        })
+    }
+    Some([one(anchors.top, pivots)?, one(anchors.bottom, pivots)?])
+}
+
 /// A bone's stable [`AnimationTargetId`], shared by the clips' curves and the joint entities.
 pub fn bone_target_id(bone: u16) -> AnimationTargetId {
     AnimationTargetId::from_name(&Name::new(format!("benilla_bone_{bone}")))
@@ -1007,6 +1035,44 @@ mod tests {
         assert!(
             built.joints[23].parent_arm.is_none() && built.joints[25].parent_arm.is_none(),
             "the swinging spine bones are ordinary"
+        );
+    }
+
+    /// A `$WTT`/`$WTB` event is written at its bone's bind point (a bow's limb tip), so the posed
+    /// anchor must take the offset from that pivot: feeding `posed_point` the absolute point puts
+    /// the tip at twice the pivot, which draws the string twice as long and off the limbs.
+    #[test]
+    fn a_string_anchor_is_an_offset_from_its_bone_pivot() {
+        let pivots = [
+            Vec3::ZERO,
+            wow_to_bevy([0.2, 0.0, 0.1]),
+            wow_to_bevy([0.8, 0.0, 0.13]),
+        ];
+        let anchors = benilla_formats::StringAnchors {
+            top: (2, [0.8, 0.0, 0.13]),
+            bottom: (2, [0.8, 0.0, 0.23]),
+        };
+        let [top, bottom] = build_string_anchors(anchors, &pivots).expect("both bones exist");
+        assert_eq!(top.bone, 2);
+        assert_eq!(top.position, wow_to_bevy([0.8, 0.0, 0.13]));
+        assert_eq!(
+            top.offset,
+            Vec3::ZERO,
+            "the event sits on its bone's pivot, so a pose turns it about the bone, not twice"
+        );
+        assert_eq!(bottom.position, wow_to_bevy([0.8, 0.0, 0.23]));
+        assert_eq!(
+            bottom.offset,
+            wow_to_bevy([0.8, 0.0, 0.23]) - wow_to_bevy([0.8, 0.0, 0.13]),
+            "an off-pivot anchor keeps its lever arm in the bone's frame"
+        );
+        let missing = benilla_formats::StringAnchors {
+            top: (3, [0.0; 3]),
+            bottom: (2, [0.0; 3]),
+        };
+        assert!(
+            build_string_anchors(missing, &pivots).is_none(),
+            "an anchor on a bone the skeleton lacks is dropped, not clamped"
         );
     }
 }

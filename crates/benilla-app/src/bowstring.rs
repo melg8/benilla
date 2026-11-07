@@ -5,9 +5,14 @@
 //! packed vertex color is not decoded.
 //!
 //! The tips are posed: `$BWP` plays BowPull (160) on the prop and `$BWR` returns it to Stand (0),
-//! so the markers ride limb bones that bend through the draw.
+//! so the markers ride limb bones that bend through the draw. An event's position is the model
+//! point at bind (its tip bone's pivot on every shipped bow), so the posed path takes the offset
+//! from that pivot — [`benilla_world::rig_anim::RigPose::posed_point`] applies the bone's full
+//! matrix — and a prop without a pose draws the bind point itself.
 
 use bevy::prelude::*;
+
+use benilla_assets::StringAnchor;
 
 use crate::creature_anim::NockLatch;
 use crate::entities::BoneAttach;
@@ -20,9 +25,9 @@ const HAND_ARROW: u16 = 0x23;
 pub(crate) struct Bowstring {
     /// The unit wearing the bow, which carries the HandArrow attach and the nock latch.
     pub(crate) owner: Entity,
-    /// The `$WTT` top and `$WTB` bottom anchors as `(bone, model-local offset)`.
-    pub(crate) top: (u16, Vec3),
-    pub(crate) bottom: (u16, Vec3),
+    /// The `$WTT` top and `$WTB` bottom anchors, each on its limb-tip bone.
+    pub(crate) top: StringAnchor,
+    pub(crate) bottom: StringAnchor,
 }
 
 /// Draws every visible bow's string, tip to middle to tip, from this frame's joint frames.
@@ -48,10 +53,10 @@ fn draw_bowstrings(
             continue;
         }
         // The prop's own pose when it flexes (`joints_root` is this entity); its rigid frame
-        // otherwise.
-        let tip = |(bone, offset): (u16, Vec3)| {
-            flex.and_then(|p| p.posed_point(prop, bone, offset))
-                .unwrap_or_else(|| prop.transform_point(offset))
+        // otherwise, where the bind point is the anchor itself.
+        let tip = |a: StringAnchor| {
+            flex.and_then(|p| p.posed_point(prop, a.bone, a.offset))
+                .unwrap_or_else(|| prop.transform_point(a.position))
         };
         let top = tip(bs.top);
         let bottom = tip(bs.bottom);

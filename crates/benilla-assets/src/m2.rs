@@ -22,9 +22,9 @@ use crate::bone_target_id;
 use crate::coords::wow_to_bevy;
 use crate::model::{
     arm_subtree_roots, billboard_info, build_animation_clip, build_attachments, build_global_bones,
-    build_grip_clip, build_skeleton, finger_subtree_roots, in_subtree, skeleton_pivots,
-    upper_subtree_root, AnimClip, ModelAnimations, ModelAttachment, ModelSkeleton, ModelSubmesh,
-    Stage1,
+    build_grip_clip, build_skeleton, build_string_anchors, finger_subtree_roots, in_subtree,
+    skeleton_pivots, upper_subtree_root, AnimClip, ModelAnimations, ModelAttachment, ModelSkeleton,
+    ModelSubmesh, Stage1, StringAnchor,
 };
 
 /// A loaded M2: its batches, bounds, collision hull, rig, animations, effects and cameras.
@@ -65,9 +65,9 @@ pub struct M2Model {
     /// The whole camera table by raw index, for `SetCamera(n)`; an index past its end leaves the
     /// pane on the orthographic leg.
     pub cameras: Vec<PaneCamera>,
-    /// A bow's `$WTT`/`$WTB` string ends `[top, bottom]` as (bone, Bevy-space point), for the
-    /// string drawer `0x611ff0`.
-    pub string_anchors: Option<[(u16, Vec3); 2]>,
+    /// A bow's `$WTT`/`$WTB` string ends `[top, bottom]`, each with its bone, bind point and
+    /// bone-pivot offset, for the string drawer `0x611ff0` and the melee swing trail `0x6c67f0`.
+    pub string_anchors: Option<[StringAnchor; 2]>,
     /// The fishing pole's `$CCH` rod tip, Bevy space, where the line draw `0x61f780` starts.
     pub cch_marker: Option<Vec3>,
     /// The header's `GlobalModelFlags` (`+0x10`); bits `&3` conform the model to the ground
@@ -644,12 +644,8 @@ impl AssetLoader for M2ModelLoader {
             })
             .collect();
 
-        let string_anchors = benilla_formats::parse_m2_string_anchors(&bytes).map(|a| {
-            [
-                (a.top.0, wow_to_bevy(a.top.1)),
-                (a.bottom.0, wow_to_bevy(a.bottom.1)),
-            ]
-        });
+        let string_anchors = benilla_formats::parse_m2_string_anchors(&bytes)
+            .and_then(|a| build_string_anchors(a, &pivots));
 
         let cch_marker = benilla_formats::parse_m2_cch_marker(&bytes).map(|(_, p)| wow_to_bevy(p));
 

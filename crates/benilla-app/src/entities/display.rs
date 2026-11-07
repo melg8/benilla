@@ -160,9 +160,9 @@ pub(crate) struct DisplayModel {
     /// widget renders through (`0x505890`), else the reference's fixed fallback camera, and
     /// `SetCamera(n)` names any (`0x76cec0`).
     pub(super) cameras: std::sync::Arc<[benilla_assets::PortraitCamera]>,
-    /// A bow's `$WTT`/`$WTB` string anchors (`0x611ff0`), `[top, bottom]` as
-    /// `(bone, model-local Bevy position)`.
-    pub(super) string_anchors: Option<[(u16, Vec3); 2]>,
+    /// A bow's `$WTT`/`$WTB` string anchors (`0x611ff0`), `[top, bottom]`, each with the bone it
+    /// rides, its bind point and the offset from that bone's pivot.
+    pub(super) string_anchors: Option<[benilla_assets::StringAnchor; 2]>,
     /// A fishing pole's `$CCH` line anchor (`0x61f780`) in mesh-frame Bevy space.
     pub(super) cch_marker: Option<Vec3>,
     /// The authored bbox z-extent in model-local yards before scale: a model with no PlayerName

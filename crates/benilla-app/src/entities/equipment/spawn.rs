@@ -284,7 +284,7 @@ fn spawn_slot(
         if let Some([top, bottom]) = dm.string_anchors {
             commands.entity(root).insert(crate::bowstring::Bowstring {
                 owner: entity,
-                // Bone and offset: the prop flexes, so the tips move.
+                // The event point is the bind point; each tip follows its limb bone's pose.
                 top,
                 bottom,
             });
@@ -296,7 +296,10 @@ fn spawn_slot(
         if let Some([top, bottom]) = dm.string_anchors {
             commands
                 .entity(root)
-                .insert(crate::weapon_trail::WeaponTrail::new(top.1, bottom.1));
+                .insert(crate::weapon_trail::WeaponTrail::new(
+                    top.position,
+                    bottom.position,
+                ));
         }
     }
     // The fishing line's near anchor (`0x61f780`). The reference gates on class 2 subclass 20 and
