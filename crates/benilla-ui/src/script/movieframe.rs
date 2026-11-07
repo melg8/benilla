@@ -23,7 +23,7 @@ use super::binding_abi::{flag_or_default, name_of, optional_string};
 use super::event;
 use super::object::frame_handle_of;
 use super::{Model, UiScript};
-use crate::widget::{FrameHandle, FrameKind};
+use crate::widget::{FrameHandle, FrameKind, RegionHandle};
 
 use player::{Audio, Playback, Step};
 
@@ -248,9 +248,44 @@ fn stop_movie(lua: &Lua, h: FrameHandle) {
     fire(lua, h, "OnMovieFinished", Vec::new());
 }
 
+/// The stock `MovieFrame.xml`'s caption backdrop and its text (`MovieFrame.lua:36`, `:49`).
+const SUBTITLE_AREA: &str = "MovieFrameSubtitleArea";
+const SUBTITLE_STRING: &str = "MovieFrameSubtitleString";
+
+/// Keep the stock caption backdrop, `MovieFrameSubtitleArea`, shown only while the caption text
+/// it backs, `MovieFrameSubtitleString`, is shown.
+///
+/// Deviation: `MovieFrame.xml` anchors the area's 800×138 black texture 630 units from the top
+/// of the 768-unit glue root and no script hides it, because at 4:3 the movie's picture ends
+/// above it: its bitmap's last rows are black padding (`MovieBitmap::picture_row`), so the
+/// texture is invisible. At widescreen the picture grows by the scaled aspect
+/// (`MovieScreen::quad`) to ~725 units, and the always-shown backdrop (OVERLAY) then paints a
+/// black bar over the picture's bottom (ARTWORK). Tying it to the caption string keeps the
+/// backdrop behind a caption and nowhere else. A UI with no such regions is untouched.
+fn sync_subtitle_area(lua: &Lua, h: FrameHandle) {
+    let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+    let region = |model: &Model, name: &str| -> Option<RegionHandle> {
+        let id = *model.region_by_name.get(name)?;
+        let rh = *model.id_to_region.get(&id)?;
+        (model.arena.region(rh)?.owner == h).then_some(rh)
+    };
+    let (Some(area), Some(string)) = (
+        region(&model, SUBTITLE_AREA),
+        region(&model, SUBTITLE_STRING),
+    ) else {
+        return;
+    };
+    let caption_up = !model.region_data.get(&string).is_some_and(|d| d.hidden);
+    let want_hidden = !caption_up;
+    if model.region_data.get(&area).is_some_and(|d| d.hidden) != want_hidden {
+        model.set_region_hidden(area, want_hidden);
+    }
+}
+
 /// The draw callback's step on frame `h` (`0x78d680`): the clock, then after a shown frame the
 /// caption that ended comes down and the one the clock reached goes up (`0x78d0ca`-`0x78d191`).
 fn step_movie(lua: &Lua, h: FrameHandle) {
+    sync_subtitle_area(lua, h);
     let (step, id, hide) = {
         let mut model = lua.app_data_mut::<Model>().expect("model app_data");
         let now = model.now_ms() as u32;
