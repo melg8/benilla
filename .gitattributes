@@ -2,6 +2,10 @@
 # shaders, Lua and XML and match them on "\n", so a Windows checkout must read the same bytes.
 * text=auto eol=lf
 
+# Windows batch files are the exception: cmd.exe parses them line by line, and CRLF is the
+# ending it expects. `scripts/*.bat` are local helper scripts, not read by any test.
+*.bat text eol=crlf
+
 # Vendored benilla-re tables are compared and read byte for byte; no line-ending conversion.
 reference/*.tsv -text
 
