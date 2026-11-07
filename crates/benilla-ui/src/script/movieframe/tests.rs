@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::script::{MovieAudio, MovieOpen, QuadContent, UiScript};
+use crate::script::{movie_bitmap, MovieAudio, MovieOpen, Outline, QuadContent, UiScript};
 
 /// Every path the reader was asked for, and how it opened.
 type Asked = Rc<RefCell<Vec<(String, MovieOpen)>>>;
@@ -347,4 +347,117 @@ fn a_vm_dropped_mid_movie_finishes_its_movie() {
     s.tick(0.0);
     drop(s);
     assert_eq!(*fired.borrow(), 1);
+}
+
+/// The caption block sits as a whole: pinned to the root's bottom while the black band below the
+/// picture holds it, else lifted clear of the picture's bottom edge, keeping the stock backdrop
+/// hidden and the text outlined. It never straddles the edge at any aspect.
+#[test]
+fn the_caption_block_never_straddles_the_picture_edge() {
+    const ROOT_H: f32 = 768.0;
+    const TEXT_H: f32 = 50.0;
+    // The visible bottom of the 1024-wide bitmap's picture in its quad's orthographic units: the
+    // first `picture_row` rows are black padding (`MovieBitmap`), and `MovieScreen::quad` scales
+    // the span by `0.75 · w/h` about the window's middle.
+    let bitmap = movie_bitmap(1024).unwrap();
+    let visible_bottom = bitmap.y_bottom
+        + (bitmap.y_top - bitmap.y_bottom) * bitmap.picture_row as f32 / bitmap.height as f32;
+    for (w, h, lifted) in [
+        (1024.0, 768.0, false),  // 4:3
+        (1680.0, 1050.0, false), // 16:10
+        (1920.0, 1080.0, false), // 16:9
+        (1920.0, 960.0, true),   // 2:1: the band is shorter than the block
+        (2560.0, 1080.0, false), // 21:9: the picture reaches the root's bottom
+    ] {
+        let (mut s, _) = movie_vm(vec![("A.avi", avi(10, &[]))]);
+        s.set_window_size(w, h);
+        s.run(
+            r#"
+            M:SetAllPoints()
+            local area = M:CreateTexture("MovieFrameSubtitleArea", "OVERLAY")
+            area:SetWidth(800)
+            area:SetHeight(138)
+            area:SetPoint("TOP", M, "TOP", 0, -630)
+            local text = M:CreateFontString("MovieFrameSubtitleString", "OVERLAY")
+            text:SetFont("Fonts\\FRIZQT__.TTF", 20)
+            text:SetPoint("TOPLEFT", area, "TOPLEFT")
+            text:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT")
+        "#,
+        )
+        .unwrap();
+        s.run(r#"M:StartMovie("A")"#).unwrap();
+        s.tick(0.0);
+        s.run(r#"MovieFrameSubtitleString:SetText("one\ntwo") MovieFrameSubtitleString:Show()"#)
+            .unwrap();
+        let string_id = s.model_ref().region_by_name["MovieFrameSubtitleString"];
+        let string = *s
+            .model_ref()
+            .id_to_region
+            .get(&string_id)
+            .expect("the caption string");
+        let area = {
+            let model = s.model_ref();
+            *model
+                .id_to_region
+                .get(&model.region_by_name["MovieFrameSubtitleArea"])
+                .expect("the caption backdrop")
+        };
+        s.set_measured_text_unwrapped(&[(string_id, 120.0, TEXT_H, 0)]);
+        s.tick(0.0);
+        s.resolve();
+
+        let rect = |rh| {
+            let r = s
+                .model_ref()
+                .region_rect(rh)
+                .expect("a resolved caption rect");
+            (ROOT_H - r.top, ROOT_H - r.bottom)
+        };
+        let (area_top, area_bottom) = rect(area);
+        let (string_top, string_bottom) = rect(string);
+        assert!(
+            (area_top - string_top).abs() < 0.05 && (area_bottom - string_bottom).abs() < 0.05,
+            "{w}x{h}: the caption is the backdrop's box, {string_top}..{string_bottom} in \
+             {area_top}..{area_bottom}"
+        );
+        let block_top = area_top + (area_bottom - area_top - TEXT_H) * 0.5;
+        let block_bottom = block_top + TEXT_H;
+        let picture_bottom = ROOT_H * (0.5 - 0.75 * (w / h) * visible_bottom);
+        if lifted {
+            assert!(
+                (block_bottom - (picture_bottom - 4.0)).abs() < 0.1,
+                "{w}x{h}: the block {block_top}..{block_bottom} is not lifted over the edge \
+                 {picture_bottom}"
+            );
+        } else {
+            assert!(
+                (block_bottom - ROOT_H).abs() < 0.1,
+                "{w}x{h}: the block {block_top}..{block_bottom} is not pinned to the root's bottom"
+            );
+        }
+        if picture_bottom < ROOT_H {
+            assert!(
+                lifted || block_top >= picture_bottom,
+                "{w}x{h}: the pinned block {block_top}..{block_bottom} straddles the picture's \
+                 bottom {picture_bottom}"
+            );
+            assert!(
+                !lifted || block_bottom <= picture_bottom,
+                "{w}x{h}: the lifted block {block_top}..{block_bottom} straddles the picture's \
+                 bottom {picture_bottom}"
+            );
+        }
+        let shown = s
+            .eval::<(bool, bool)>(
+                "return MovieFrameSubtitleArea:IsShown(), MovieFrameSubtitleString:IsShown()",
+            )
+            .unwrap();
+        assert_eq!(shown, (false, true), "{w}x{h}: only the text draws");
+        assert_eq!(
+            s.model_ref().region_data.get(&string).map(|d| d.outline),
+            Some(Outline::Thick),
+            "{w}x{h}: the text takes the thick outline"
+        );
+        assert!(s.errors().is_empty(), "{w}x{h}: {:?}", s.errors());
+    }
 }

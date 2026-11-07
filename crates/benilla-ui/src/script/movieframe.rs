@@ -22,7 +22,8 @@ use mlua::{Lua, MultiValue, Table, Value};
 use super::binding_abi::{flag_or_default, name_of, optional_string};
 use super::event;
 use super::object::frame_handle_of;
-use super::{Model, UiScript};
+use super::{FontMask, Model, Outline, UiScript};
+use crate::layout::{Len, Point};
 use crate::widget::{FrameHandle, FrameKind, RegionHandle};
 
 use player::{Audio, Playback, Step};
@@ -252,40 +253,128 @@ fn stop_movie(lua: &Lua, h: FrameHandle) {
 const SUBTITLE_AREA: &str = "MovieFrameSubtitleArea";
 const SUBTITLE_STRING: &str = "MovieFrameSubtitleString";
 
-/// Keep the stock caption backdrop, `MovieFrameSubtitleArea`, shown only while the caption text
-/// it backs, `MovieFrameSubtitleString`, is shown.
+/// The clear space kept between a caption lifted over the picture's bottom edge and that edge,
+/// in script units.
+const SUBTITLE_GAP: f32 = 4.0;
+
+/// The region `name` on frame `h`, if the stock UI made one.
+fn subtitle_region(model: &Model, name: &str, h: FrameHandle) -> Option<RegionHandle> {
+    let id = *model.region_by_name.get(name)?;
+    let rh = *model.id_to_region.get(&id)?;
+    (model.arena.region(rh)?.owner == h).then_some(rh)
+}
+
+/// The bottom edge of the picture playing on frame `h`, in script units down the glue root: the
+/// drawn quad's bottom plus the bitmap's first `picture_row` black rows, which stay black at the
+/// quad's bottom (`MovieBitmap::picture_row`, `fill_bitmap`). `None` while no movie plays or its
+/// width has no bitmap.
+fn picture_bottom(model: &Model, h: FrameHandle) -> Option<f32> {
+    let width = model
+        .movies
+        .frames
+        .get(&h)?
+        .playback
+        .as_ref()?
+        .movie
+        .width();
+    let bitmap = movie_bitmap(width)?;
+    let span = bitmap.y_top - bitmap.y_bottom;
+    let visible_bottom =
+        bitmap.y_bottom + span * (bitmap.picture_row as f32 / bitmap.height as f32);
+    // `MovieScreen::scaled_aspect`, the reference's `[0x832a4c]`: `0.75 · w/h`.
+    let a = 0.75 * model.screen_aspect();
+    Some(model.screen.height() * (0.5 - a * visible_bottom))
+}
+
+/// The top `MovieFrameSubtitleArea` takes so its centred text never straddles the picture's
+/// bottom edge, in script units down the glue root; `None` while the text is unmeasured or no
+/// movie plays.
 ///
-/// Deviation: `MovieFrame.xml` anchors the area's 800×138 black texture 630 units from the top
-/// of the 768-unit glue root and no script hides it, because at 4:3 the movie's picture ends
-/// above it: its bitmap's last rows are black padding (`MovieBitmap::picture_row`), so the
-/// texture is invisible. At widescreen the picture grows by the scaled aspect
-/// (`MovieScreen::quad`) to ~725 units, and the always-shown backdrop (OVERLAY) then paints a
-/// black bar over the picture's bottom (ARTWORK). Tying it to the caption string keeps the
-/// backdrop behind a caption and nowhere else. A UI with no such regions is untouched.
-fn sync_subtitle_area(lua: &Lua, h: FrameHandle) {
+/// Deviation: the stock area is pinned 630 units from the top and the caption is centred in it
+/// (~674–724), because it is sized for a 4:3 picture, while the picture's bottom edge moves with
+/// the aspect (`MovieScreen::quad`): at 4:3 it ends above the text, at 16:9 it crosses it (the
+/// first line over the picture, the second on black), and past ~2.21:1 it fills the root. Here the
+/// block is placed as a whole: bottom-aligned when the black band below the picture holds it, else
+/// lifted clear of the edge.
+fn subtitle_area_top(model: &Model, h: FrameHandle, string: RegionHandle) -> Option<f32> {
+    let area = subtitle_region(model, SUBTITLE_AREA, h)?;
+    let units = model.layout_units();
+    let area_h = model.region_data.get(&area)?.size_script(units)?.1;
+    let text_h = model.region_data.get(&string)?.measured?.h;
+    if text_h <= 0.0 {
+        return None;
+    }
+    let picture_bottom = picture_bottom(model, h)?;
+    let root_h = model.screen.height();
+    // The band below the picture holds the block (or the picture reaches the root's bottom):
+    // sit it at the bottom. Otherwise the edge would cut the block, so lift the block above it.
+    let block_bottom =
+        if picture_bottom >= root_h || picture_bottom <= root_h - text_h - SUBTITLE_GAP {
+            root_h
+        } else {
+            (picture_bottom - SUBTITLE_GAP).max(text_h)
+        };
+    Some(block_bottom - text_h * 0.5 - area_h * 0.5)
+}
+
+/// Draw the captions as outlined text alone, placed clear of the picture's bottom edge: hide the
+/// stock caption backdrop and thicken the glyph outline, so no black rectangle covers the
+/// picture.
+///
+/// Deviation: `MovieFrame.xml` anchors `MovieFrameSubtitleArea`'s 800×138 black texture 630
+/// units from the top of the 768-unit glue root and no script hides it, because at 4:3 the
+/// movie's picture ends above it: its bitmap's last rows are black padding
+/// (`MovieBitmap::picture_row`), so the texture is invisible. At widescreen the picture grows by
+/// the scaled aspect (`MovieScreen::quad`) to ~725 units, and the always-shown backdrop
+/// (OVERLAY) paints a black bar over the picture's bottom (ARTWORK). Hiding it leaves the text
+/// over the picture, so its stock `GlueFontNormalHuge` NORMAL outline becomes THICK (its shadow
+/// stays) to keep it readable. A UI with no such regions is untouched.
+fn style_subtitles(lua: &Lua, h: FrameHandle) {
     let mut model = lua.app_data_mut::<Model>().expect("model app_data");
-    let region = |model: &Model, name: &str| -> Option<RegionHandle> {
-        let id = *model.region_by_name.get(name)?;
-        let rh = *model.id_to_region.get(&id)?;
-        (model.arena.region(rh)?.owner == h).then_some(rh)
-    };
-    let (Some(area), Some(string)) = (
-        region(&model, SUBTITLE_AREA),
-        region(&model, SUBTITLE_STRING),
-    ) else {
+    let area = subtitle_region(&model, SUBTITLE_AREA, h);
+    if let Some(area) = area {
+        if !model.region_data.get(&area).is_some_and(|d| d.hidden) {
+            model.set_region_hidden(area, true);
+        }
+    }
+    let Some(string) = subtitle_region(&model, SUBTITLE_STRING, h) else {
         return;
     };
-    let caption_up = !model.region_data.get(&string).is_some_and(|d| d.hidden);
-    let want_hidden = !caption_up;
-    if model.region_data.get(&area).is_some_and(|d| d.hidden) != want_hidden {
-        model.set_region_hidden(area, want_hidden);
+    let thick = model
+        .region_data
+        .get(&string)
+        .is_some_and(|d| d.outline == Outline::Thick);
+    if !thick {
+        let d = model.region_data.entry(string).or_default();
+        d.outline = Outline::Thick;
+        // The face, height and flags are one group: clear it so the font object's NORMAL
+        // outline stops overriding this local one.
+        d.font_mask.clear(FontMask::FONT);
+        model.touch_measure(string);
+    }
+    let (Some(area), Some(top)) = (area, subtitle_area_top(&model, h, string)) else {
+        return;
+    };
+    let units = model.layout_units();
+    let changed = {
+        let data = model.region_data.entry(area).or_default();
+        data.anchors
+            .get(Point::Top)
+            .copied()
+            .is_some_and(|mut anchor| {
+                anchor.y_off = Len::Script(-top);
+                data.anchors.set(anchor, units)
+            })
+    };
+    if changed {
+        model.invalidate_region(area, true);
     }
 }
 
 /// The draw callback's step on frame `h` (`0x78d680`): the clock, then after a shown frame the
 /// caption that ended comes down and the one the clock reached goes up (`0x78d0ca`-`0x78d191`).
 fn step_movie(lua: &Lua, h: FrameHandle) {
-    sync_subtitle_area(lua, h);
+    style_subtitles(lua, h);
     let (step, id, hide) = {
         let mut model = lua.app_data_mut::<Model>().expect("model app_data");
         let now = model.now_ms() as u32;

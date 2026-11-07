@@ -821,7 +821,15 @@ pub(crate) const REGISTERED: &[Registered] = &[
     // `movieSubtitle` (`0x402c18`: name `0x82e9d8`, "0", flags 0, record `[0x882640]`), Cinematic
     // Subtitles: the pre-rendered movies' subtitles, which the glue's `GetMovieSubtitles`
     // (`0x46dbc0`) hands the movie frame's `EnableSubtitles` (`MovieFrame.lua:35`).
-    same("movieSubtitle", "0"),
+    deviates(
+        "movieSubtitle",
+        "1",
+        "0",
+        "the reference registers it off and backs the captions with a black rectangle, which at \
+         widescreen covers the bottom of the movie picture; benilla hides that rectangle \
+         (`script::movieframe`) and the caption font's own outline keeps the text readable, so \
+         the cinematics ship subtitled",
+    ),
     // `useWeatherShaders` (`0x67b81d`: name `0x868598`, "1", flags 0, no callback, record
     // `[0xc7b588]`), Weather Shaders: read in each precipitation effect's constructor (`0x67480f`,
     // `0x6775a7`, `0x679274`), which clears the effect's shader flag at 0. No effect here: rain's

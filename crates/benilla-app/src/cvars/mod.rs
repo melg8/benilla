@@ -1438,6 +1438,7 @@ mod tests {
                 "gxColorBits",
                 "gxDepthBits",
                 "gxResolution",
+                "movieSubtitle",
                 "realmList",
                 "weatherDensity",
             ],
