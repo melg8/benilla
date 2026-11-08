@@ -218,7 +218,6 @@ pub(super) const INERT: &[Registered] = &[
     same("gxMultisampleQuality", "0.0").latched(), // 0x63a976
     same("gxOverride", ""),                 // 0x63a9e7
     same("horizonfarclip", "2112").checked(benilla_ui::script::check_horizon_farclip), // 0x68881c
-    same("hwDetect", "1"),                  // 0x63a259
     same("Joystick", "0"),                  // 0x5142bc
     same("lodDist", "100.0").checked(benilla_ui::script::check_lod_dist), // 0x688524
     same("M2BatchDoodads", "1"),            // 0x40292f

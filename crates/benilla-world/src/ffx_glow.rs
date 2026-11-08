@@ -112,16 +112,20 @@ pub struct FfxGlowGain(pub f32);
 #[derive(Resource, Clone, Default, ExtractResource)]
 pub struct FfxDeathFade(pub f32);
 
-/// The three switches the reference's FFX pass reads every frame, as the `ffx`, `ffxGlow` and
-/// `ffxDeath` CVars' integers (each registered "1" with the echo stub `0x6cde30`, so nothing is
-/// cached). The begin/end pair (`0x6cd890`/`0x6cda70`) runs the active pass only while `ffx`
-/// (`[0xce8a04]`, `0x6cd8a6`/`0x6cda76`) is on and the pass's own enable (vtable `+4`) says so:
-/// `CFFXGlow` (`0x6cc5a0`) reads `ffxGlow` (`0x6cc5a8`), `CFFXDeath` (`0x6cded0`) reads `ffxDeath`
+/// The four switches the reference's FFX pass reads every frame, as the `ffx`, `pixelShaders`,
+/// `ffxGlow` and `ffxDeath` CVars' integers (each registered "1" but `pixelShaders`, which
+/// registers "0"; the echo stub `0x6cde30` caches none of them). The begin/end pair
+/// (`0x6cd890`/`0x6cda70`) runs the active pass only while `ffx` (`[0xce8a04]`, `0x6cd8a6`),
+/// `pixelShaders` (`0x6cd8b6`) and the pass's own enable (vtable `+4`) hold: `CFFXGlow`
+/// (`0x6cc5a0`) reads `ffxGlow` (`0x6cc5a8`), `CFFXDeath` (`0x6cded0`) reads `ffxDeath`
 /// (`0x6cdf10`). A pass that does not run is not replaced by the other one: the slot holds one.
 #[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, ExtractResource)]
 pub struct FfxSwitches {
     /// `ffx`, the master.
     pub master: bool,
+    /// `pixelShaders`: the shader leg's switch, which also gates the whole pass. Registered "0";
+    /// `hwDetect` writes the matched `VideoHardware.dbc` row's value before the first frame.
+    pub pixel_shaders: bool,
     /// `ffxGlow`: the glow pass, the drunk and underwater haze and the underwater warp with it.
     pub glow: bool,
     /// `ffxDeath`: the ghost's death pass.
@@ -129,10 +133,12 @@ pub struct FfxSwitches {
 }
 
 impl Default for FfxSwitches {
-    /// Each registers "1".
+    /// Each registers "1" but `pixelShaders`, whose registered "0" is what a `hwDetect "0"`
+    /// install keeps.
     fn default() -> Self {
         Self {
             master: true,
+            pixel_shaders: false,
             glow: true,
             death: true,
         }
@@ -142,7 +148,7 @@ impl Default for FfxSwitches {
 impl FfxSwitches {
     /// Whether the pass the slot holds runs: the death pass while a ghost, else the glow pass.
     fn runs(self, death_pass: bool) -> bool {
-        self.master && if death_pass { self.death } else { self.glow }
+        self.master && self.pixel_shaders && if death_pass { self.death } else { self.glow }
     }
 }
 
@@ -1413,6 +1419,15 @@ mod tests {
         }
     }
 
+    /// The registered defaults with the shader leg on, as the start-up hardware step leaves them
+    /// on a modern GPU: `pixelShaders` registers "0", and `VideoHardware.dbc` row 170 gives 1.
+    fn all_on() -> FfxSwitches {
+        FfxSwitches {
+            pixel_shaders: true,
+            ..FfxSwitches::default()
+        }
+    }
+
     /// `ffxGlow` 0: `CFFXGlow`'s enable (`0x6cc5a8`) fails, so the begin/end pair runs no pass. The
     /// combine is the scene alone, the three filter passes are skipped, the warp never arms, and
     /// the death pass, glue pair included, still runs.
@@ -1420,7 +1435,7 @@ mod tests {
     fn glow_off_drops_the_glow_pass_and_only_it() {
         let off = FfxSwitches {
             glow: false,
-            ..FfxSwitches::default()
+            ..all_on()
         };
         let drunk = FfxPassState::world(0.0, 1.0).switched(off);
         let u = combine_uniform(
@@ -1466,7 +1481,7 @@ mod tests {
     fn death_off_drops_the_death_pass_without_restoring_the_glow() {
         let off = FfxSwitches {
             death: false,
-            ..FfxSwitches::default()
+            ..all_on()
         };
         let u = combine_uniform(
             0.5,
@@ -1501,7 +1516,7 @@ mod tests {
     fn the_master_off_drops_both_passes() {
         let off = FfxSwitches {
             master: false,
-            ..FfxSwitches::default()
+            ..all_on()
         };
         for (feed, what) in [(alive(), "alive"), (ghost_world(), "a ghost")] {
             let feed = feed.switched(off);
@@ -1510,10 +1525,28 @@ mod tests {
             assert!(!blur_read(&u), "{what}");
             assert!(!wave_armed(FfxState::Player, wet(), feed), "{what}");
         }
-        let on = alive().switched(FfxSwitches::default());
+        let on = alive().switched(all_on());
         let u = combine_uniform(0.5, on, living_glue(), &FfxGlow::WORLD, wet());
-        assert!(blur_read(&u), "all three on, the glow pass runs");
+        assert!(blur_read(&u), "all four on, the glow pass runs");
         assert!(wave_armed(FfxState::Player, wet(), on));
+    }
+
+    /// `pixelShaders` 0 (`0x6cd8b6`): neither pass runs, whatever the other three say. The
+    /// registered "0" is what a `hwDetect "0"` install keeps, and what a driver without the shader
+    /// caps leaves.
+    #[test]
+    fn the_shader_leg_gates_the_whole_pass() {
+        let off = FfxSwitches {
+            pixel_shaders: false,
+            ..all_on()
+        };
+        assert!(!off.runs(false), "the glow pass");
+        assert!(!off.runs(true), "the death pass");
+        let switched = alive().switched(off);
+        let u = combine_uniform(0.5, switched, living_glue(), &FfxGlow::WORLD, wet());
+        assert_eq!(u[..3], [0.0, 0.0, 0.0]);
+        assert!(!blur_read(&u));
+        assert!(!wave_armed(FfxState::Player, wet(), switched));
     }
 
     /// Dry, the uniform's first row is the plain combine's and the node binds the dry pipeline.

@@ -330,6 +330,10 @@ pub use world_map_continent::{
 };
 mod area_poi;
 pub use area_poi::{load_area_poi_catalog, AreaPoi, AreaPoiCatalog};
+mod video_hardware;
+pub use video_hardware::{
+    load_video_hardware_catalog, QualityBlock, VideoHardware, VideoHardwareCatalog,
+};
 mod world_state_ui;
 pub use world_state_ui::{load_world_state_ui_catalog, WorldStateUiCatalog, WorldStateUiRow};
 mod area_table;

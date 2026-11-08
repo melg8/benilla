@@ -364,11 +364,12 @@ impl VideoKnobs<'_> {
             // Latched like `gxWindow`: the commit is `RestartGx`, which rebuilds the window
             // (`0x58cf10` reads `+0x09`); `apply_window_mode` is that rebuild.
             "gxmaximize" => cfg.maximize = ev.flag(),
-            // The FFX pass's three switches, read every frame by the reference (`0x6cd8a6`, `0x6cc5a8`,
-            // `0x6cdf10`), so a write shows on the next frame.
-            "ffx" | "ffxglow" | "ffxdeath" => {
+            // The FFX pass's four switches, read every frame by the reference (`0x6cd8a6`,
+            // `0x6cd8b6`, `0x6cc5a8`, `0x6cdf10`), so a write shows on the next frame.
+            "ffx" | "pixelshaders" | "ffxglow" | "ffxdeath" => {
                 match ev.key().as_str() {
                     "ffx" => ffx.master = ev.flag(),
+                    "pixelshaders" => ffx.pixel_shaders = ev.flag(),
                     "ffxglow" => ffx.glow = ev.flag(),
                     _ => ffx.death = ev.flag(),
                 }

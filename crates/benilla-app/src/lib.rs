@@ -63,6 +63,7 @@ mod game_plugins;
 mod glue_session;
 mod go_anim;
 mod go_templates;
+mod hardware;
 #[cfg(feature = "dev")]
 mod hover_log;
 mod item_lane;

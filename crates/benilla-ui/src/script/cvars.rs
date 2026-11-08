@@ -892,10 +892,12 @@ const VIDEO_DEFAULT_GX: usize = 6;
 /// registers, each at its registered default. The verb writes no `uiScale`, `useUiScale` or
 /// `anisotropic`.
 ///
-/// Deviation: the reference (`0x48dad0` into `0x639a20`) writes hardware-recommended values from
-/// its matched `VideoHardware.dbc` row and the `CGxFormat` preset it names (`[0xc4e6ac]`): twelve
-/// `gx*` CVars, a synchronous `RestartGx`, then sixteen more. its registered defaults are its
-/// recommended configuration because benilla has no such matching.
+/// Deviation: benilla restores registered defaults instead, because the VM has no handle on the
+/// matched `VideoHardware.dbc` row and the device-format half has no counterpart here (see
+/// `benilla_app::hardware`). The reference (`0x48dad0` into `0x639a20`) writes the row's recommended
+/// values and the `CGxFormat` preset it names (`[0xc4e6ac]`): twelve `gx*` CVars, a synchronous
+/// `RestartGx`, then sixteen more, so the Defaults verb leaves a `hwDetect "0"` install at the
+/// registered values rather than re-detecting.
 pub const VIDEO_DEFAULT_CVARS: &[&str] = &[
     // Of the twelve `gx*` the device record writes (`0x639c40`), the six benilla registers.
     "gxWindow",

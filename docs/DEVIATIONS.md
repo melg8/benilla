@@ -16,7 +16,7 @@ A setting boots at the reference's default unless it is listed here (`docs/METHO
 
 | CVar | 1.12.1 | benilla | Why |
 | --- | --- | --- | --- |
-| `frillDensity` | `16` | `32` | the reference's registered 16 is stop 0 and its post-`hwDetect` 24 is on no stop at all, so every stop diverges; Medium (32) is the nearest one no sparser than a fresh install, and erring sparse is the worse failure for ground cover |
+| `frillDensity` | `16` | `32` | the registered default is `WorldDetail`'s Medium stop (32), while the reference registers 16 and its post-`hwDetect` 24 is on no stop at all; a fresh install takes the reference's 24 from the hardware step, so this default is what a `hwDetect "0"` install runs, and Medium is the nearest stop no sparser than 24 — erring sparse is the worse failure for ground cover |
 | `gxApi` | `direct3d` | `""` | descriptive, not a selector — benilla renders through wgpu, which has no D3D9 backend and no chooser; the value is the live adapter's own and is never persisted |
 | `gxColorBits` | `16` | `32` | these describe, they do not steer — the pair is our swapchain's own, and every format `MsaaFormats` publishes carries it |
 | `gxDepthBits` | `16` | `32` | as `gxColorBits` — the depth half of the same descriptive pair |
@@ -30,7 +30,7 @@ A setting boots at the reference's default unless it is listed here (`docs/METHO
 
 Each entry is the first sentence of a `Deviation:` comment, linking to where it lives.
 
-- [benilla-app](#benilla-app): 257
+- [benilla-app](#benilla-app): 259
 - [benilla-assets](#benilla-assets): 5
 - [benilla-blp](#benilla-blp): 1
 - [benilla-formats](#benilla-formats): 25
@@ -123,12 +123,12 @@ Each entry is the first sentence of a `Deviation:` comment, linking to where it 
 #### cvars
 
 - The reference's list runs in creation order, the records `Config.wtf` created first in file order (`0x63d8eb`), then each registration as start-up reaches it (`containers`), an order benilla-re has not traced. benilla lists in the table's order, which is register-site address order, then the rows the table lacks (benilla's own, an addon's) as they registered. ([`src/cvars/listing.rs:5`](../crates/benilla-app/src/cvars/listing.rs#L5))
-- For a row that is not latched the change callback runs, inside the call that restored it, where the reference runs no callback here (`0x63dff0`, `0x63e010`), because a knob moves only through its callback (`callbacks::CvarCallbacks`), which also stands in for the reference's direct reads of the record; without it knob and value would disagree until the next write. ([`src/cvars/mod.rs:439`](../crates/benilla-app/src/cvars/mod.rs#L439))
-- The reference's `SaveConfig` (`0x63d980`) writes only at world entry (`0x46b6f6`), at the leave-world tail (`0x490c35`-`0x490c64`) and at shutdown (`0x63daf0`), so a crash or a kill loses every change since; here a player's settings survive one because the config saves a quiet second after a change. ([`src/cvars/mod.rs:1170`](../crates/benilla-app/src/cvars/mod.rs#L1170))
+- For a row that is not latched the change callback runs, inside the call that restored it, where the reference runs no callback here (`0x63dff0`, `0x63e010`), because a knob moves only through its callback (`callbacks::CvarCallbacks`), which also stands in for the reference's direct reads of the record; without it knob and value would disagree until the next write. ([`src/cvars/mod.rs:440`](../crates/benilla-app/src/cvars/mod.rs#L440))
+- The reference's `SaveConfig` (`0x63d980`) writes only at world entry (`0x46b6f6`), at the leave-world tail (`0x490c35`-`0x490c64`) and at shutdown (`0x63daf0`), so a crash or a kill loses every change since; here a player's settings survive one because the config saves a quiet second after a change. ([`src/cvars/mod.rs:1176`](../crates/benilla-app/src/cvars/mod.rs#L1176))
 - The reference clips at full scale and has no headroom mechanism (its SFX-bus duck `0x457960` is a sidechain armed only by server-pushed voice lines); benilla limits because every SFX is mastered to full scale and overlapping kits clip. ([`src/cvars/table.rs:243`](../crates/benilla-app/src/cvars/table.rs#L243))
-- Here the dial multiplies the camera's own rate, because benilla does not change the OS pointer speed, a system-wide setting. ([`src/cvars/table.rs:493`](../crates/benilla-app/src/cvars/table.rs#L493))
-- "0" raises a borderless fullscreen window instead of mode-setting the display, because Wayland and macOS offer no mode-set and X11's leaves the desktop changed after a crash (`crate::video`). ([`src/cvars/table.rs:631`](../crates/benilla-app/src/cvars/table.rs#L631))
-- Benilla, which has no exclusive mode, applies the same curve in the composite pass (`crate::ui_gamma::DisplayGamma`), because the skipped upload would make a slider that moves no pixel. `SetGamma 0x4891f0` writes `"%f"` ("1.000000"), which `SaveConfig` (`0x63da4a`) keeps as a diff against the default "1.0", as the reference does. ([`src/cvars/table.rs:756`](../crates/benilla-app/src/cvars/table.rs#L756))
+- Here the dial multiplies the camera's own rate, because benilla does not change the OS pointer speed, a system-wide setting. ([`src/cvars/table.rs:497`](../crates/benilla-app/src/cvars/table.rs#L497))
+- "0" raises a borderless fullscreen window instead of mode-setting the display, because Wayland and macOS offer no mode-set and X11's leaves the desktop changed after a crash (`crate::video`). ([`src/cvars/table.rs:635`](../crates/benilla-app/src/cvars/table.rs#L635))
+- Benilla, which has no exclusive mode, applies the same curve in the composite pass (`crate::ui_gamma::DisplayGamma`), because the skipped upload would make a slider that moves no pixel. `SetGamma 0x4891f0` writes `"%f"` ("1.000000"), which `SaveConfig` (`0x63da4a`) keeps as a diff against the default "1.0", as the reference does. ([`src/cvars/table.rs:758`](../crates/benilla-app/src/cvars/table.rs#L758))
 
 #### death
 
@@ -151,6 +151,11 @@ Each entry is the first sentence of a `Deviation:` comment, linking to where it 
 #### go_templates
 
 - One per entry, where the reference keeps one per call, as the creature arm's waits are kept (`benilla_ui::script::quest_log`). ([`src/go_templates.rs:161`](../crates/benilla-app/src/go_templates.rs#L161))
+
+#### hardware
+
+- Benilla runs the quality half only, because it has no exclusive mode-set to restart (its `gx*` rows describe a window it manages itself, and `gxResolution` is already the windowed size). The other half of the step (`0x639c40`) writes the row's default device-format record into twelve `gx*` CVars and restarts the device, so those rows keep their registered defaults. ([`src/hardware.rs:7`](../crates/benilla-app/src/hardware.rs#L7))
+- A nonzero `hwDetect` is the only trigger, because benilla has no `-hwdetect` switch and no registry record of the last run; the `Hardware changed.  Reload default settings?` box (`0x641670`) is not modelled, so detection always runs on a fresh install. ([`src/hardware.rs:12`](../crates/benilla-app/src/hardware.rs#L12))
 
 #### lanes
 
@@ -230,8 +235,8 @@ Each entry is the first sentence of a `Deviation:` comment, linking to where it 
 #### quest_markers
 
 - A quest marker outranks the green, where the reference's two handlers race last-write-wins on the slot, because a fixed order is deterministic; the two meet only on a flight master with a live quest marker, invisible in practice. ([`src/quest_markers/mod.rs:124`](../crates/benilla-app/src/quest_markers/mod.rs#L124))
-- A live V-plate (`VPlates`) raises the marker too, because the reference's marker sits low behind the plate: it arms anim 0 under a plate, whose name suppression nulls the `desc+0x8` handle `0x6c7950` tests. ([`src/quest_markers/mod.rs:397`](../crates/benilla-app/src/quest_markers/mod.rs#L397))
-- We wait for propagation to settle the joint matrix, so the marker is always constant size. The reference reads the parent's `model+0xbc` as it stands at attach, and a parent still at its constructor identity (a body still streaming, or a mount model pending, `0x6075ac`) leaves the marker unscaled and proportional to the NPC for good. We keep the settled read because it is deterministic and is what the reference shows over a placed NPC. ([`src/quest_markers/mod.rs:464`](../crates/benilla-app/src/quest_markers/mod.rs#L464))
+- A live V-plate (`VPlates`) raises the marker too, because the reference's marker sits low behind the plate: it arms anim 0 under a plate, whose name suppression nulls the `desc+0x8` handle `0x6c7950` tests. ([`src/quest_markers/mod.rs:412`](../crates/benilla-app/src/quest_markers/mod.rs#L412))
+- We wait for propagation to settle the joint matrix, so the marker is always constant size. The reference reads the parent's `model+0xbc` as it stands at attach, and a parent still at its constructor identity (a body still streaming, or a mount model pending, `0x6075ac`) leaves the marker unscaled and proportional to the NPC for good. We keep the settled read because it is deterministic and is what the reference shows over a placed NPC. ([`src/quest_markers/mod.rs:479`](../crates/benilla-app/src/quest_markers/mod.rs#L479))
 
 #### raid_marks
 
@@ -501,7 +506,7 @@ Each entry is the first sentence of a `Deviation:` comment, linking to where it 
 
 - `gxWindow "0"` is borderless fullscreen, not 1.12's exclusive mode-set at `gxResolution`, because Wayland has no client mode-setting (winit ignores `Fullscreen::Exclusive` there), and X11's XRandR changes the desktop's mode and a crash leaves it changed. Bevy's `WindowMode::Fullscreen` also panics on a live change that cannot resolve a monitor (`bevy_winit::winit_windows:91`, `system.rs:333`). ([`src/video.rs:5`](../crates/benilla-app/src/video.rs#L5))
 - On Windows, NVIDIA's Vulkan driver (610.88 seen) crashes inside `vkQueuePresentKHR` on the first present after any swapchain resize while the present mode is `Fifo`, `FifoRelaxed` or `AutoVsync` (a maximize is a resize). The fault is in the driver's own DXGI present (`d3d11.dll`): it stays with `VK_LAYER_NV_present` disabled, and the validation layer reports nothing before it. `Mailbox`, `AutoNoVsync` and DX12 survive, so there "vsync on" is `AutoNoVsync` paced to the monitor's refresh rate (`present_choice`) because that keeps the synced look without the crash. `$WOW_PRESENT=fifo` restores plain `Fifo`. ([`src/video.rs:17`](../crates/benilla-app/src/video.rs#L17))
-- Sizes are logical px, because the windowed `gxResolution` is a logical inner size here. Read at each verb (`DisplayLive`), so the list follows the display and `widescreen`; the reference builds its list once and never invalidates it. ([`src/video.rs:639`](../crates/benilla-app/src/video.rs#L639))
+- Sizes are logical px, because the windowed `gxResolution` is a logical inner size here. Read at each verb (`DisplayLive`), so the list follows the display and `widescreen`; the reference builds its list once and never invalidates it. ([`src/video.rs:640`](../crates/benilla-app/src/video.rs#L640))
 
 #### vplates
 
@@ -765,12 +770,12 @@ Each entry is the first sentence of a `Deviation:` comment, linking to where it 
 - The list is the window sizes this client can present, not the device's display modes, because benilla makes no exclusive mode-set. `"WxH"` is a contract: `OptionsFrame.lua:281-284` splits on the `x`, raising on a string without one, and `CT_Viewport.lua:107` matches `"(%d+)x(%d+)"`, failing silently. ([`src/script/cvars.rs:81`](../crates/benilla-ui/src/script/cvars.rs#L81))
 - The tie-break is ours, because area alone with the reference's adjacent-only dedupe can leave a duplicate `"WxH"` when two modes share an area (1280x960, 1600x768). ([`src/script/cvars.rs:94`](../crates/benilla-ui/src/script/cvars.rs#L94))
 - An id out of range is ignored, because the reference reads one entry past the last (`0x48c67c`) and a clamp would apply a format the player did not pick. A missing id is ignored too, where the reference takes the first entry (`0x48c657`). ([`src/script/cvars.rs:779`](../crates/benilla-ui/src/script/cvars.rs#L779))
-- The reference (`0x48dad0` into `0x639a20`) writes hardware-recommended values from its matched `VideoHardware.dbc` row and the `CGxFormat` preset it names (`[0xc4e6ac]`): twelve `gx*` CVars, a synchronous `RestartGx`, then sixteen more. its registered defaults are its recommended configuration because benilla has no such matching. ([`src/script/cvars.rs:895`](../crates/benilla-ui/src/script/cvars.rs#L895))
-- The index is of the live window size, not of the `gxResolution` CVar the reference parses (`0x48bf20`), because the window here can be dragged to any size, where the reference's backbuffer stays at `gxResolution`'s, and `CT_Viewport` scales by the live one. The list and the window are logical pixels and the fullscreen `gxResolution` device pixels, so on a scaled display the entry this picks is not the size `GetCVar` answers. ([`src/script/cvars.rs:948`](../crates/benilla-ui/src/script/cvars.rs#L948))
-- 0, a negative or an index past the count clamps to the nearer end, because the reference reads one element past the last there (`0x48c00d`), uninitialised memory. ([`src/script/cvars.rs:966`](../crates/benilla-ui/src/script/cvars.rs#L966))
-- Always empty, because a refresh rate is only selectable through an exclusive mode-set and benilla has none. ([`src/script/cvars.rs:1010`](../crates/benilla-ui/src/script/cvars.rs#L1010))
-- 1.12 has no such CVar; it exists because our Graphics page needs somewhere to keep the stop, and takes the API's name. ([`src/script/cvars.rs:1118`](../crates/benilla-ui/src/script/cvars.rs#L1118))
-- The getter reads `CVAR_WORLD_DETAIL`, where the reference's reads only `smallCull` (`0x488d77`), because benilla's stop follows the knob that draws: a console `frillDensity` write moves the ground clutter and `WorldDetail` with it, and no renderer reads `smallCull` (its callback's `[0x868620]` has no reader). A fresh reference client reads stop 1 (`smallCull 0.04`), hence `WorldDetail`'s `"1"`. ([`src/script/cvars.rs:1146`](../crates/benilla-ui/src/script/cvars.rs#L1146))
+- Benilla restores registered defaults instead, because the VM has no handle on the matched `VideoHardware.dbc` row and the device-format half has no counterpart here (see `benilla_app::hardware`). The reference (`0x48dad0` into `0x639a20`) writes the row's recommended values and the `CGxFormat` preset it names (`[0xc4e6ac]`): twelve `gx*` CVars, a synchronous `RestartGx`, then sixteen more, so the Defaults verb leaves a `hwDetect "0"` install at the registered values rather than re-detecting. ([`src/script/cvars.rs:895`](../crates/benilla-ui/src/script/cvars.rs#L895))
+- The index is of the live window size, not of the `gxResolution` CVar the reference parses (`0x48bf20`), because the window here can be dragged to any size, where the reference's backbuffer stays at `gxResolution`'s, and `CT_Viewport` scales by the live one. The list and the window are logical pixels and the fullscreen `gxResolution` device pixels, so on a scaled display the entry this picks is not the size `GetCVar` answers. ([`src/script/cvars.rs:950`](../crates/benilla-ui/src/script/cvars.rs#L950))
+- 0, a negative or an index past the count clamps to the nearer end, because the reference reads one element past the last there (`0x48c00d`), uninitialised memory. ([`src/script/cvars.rs:968`](../crates/benilla-ui/src/script/cvars.rs#L968))
+- Always empty, because a refresh rate is only selectable through an exclusive mode-set and benilla has none. ([`src/script/cvars.rs:1012`](../crates/benilla-ui/src/script/cvars.rs#L1012))
+- 1.12 has no such CVar; it exists because our Graphics page needs somewhere to keep the stop, and takes the API's name. ([`src/script/cvars.rs:1120`](../crates/benilla-ui/src/script/cvars.rs#L1120))
+- The getter reads `CVAR_WORLD_DETAIL`, where the reference's reads only `smallCull` (`0x488d77`), because benilla's stop follows the knob that draws: a console `frillDensity` write moves the ground clutter and `WorldDetail` with it, and no renderer reads `smallCull` (its callback's `[0x868620]` has no reader). A fresh reference client reads stop 1 (`smallCull 0.04`), hence `WorldDetail`'s `"1"`. ([`src/script/cvars.rs:1148`](../crates/benilla-ui/src/script/cvars.rs#L1148))
 - The minutes come from the server's table, not from spell 15007's `Spell.dbc` duration, because the aura the server applies is what the dialog must warn about. ([`src/script/death.rs:45`](../crates/benilla-ui/src/script/death.rs#L45))
 - The promotion's IME legs (`0x77d417`–`0x77d431`) and the IME writer's `or 6` (`0x77acde`, in `0x77ac60`) are not modelled because benilla has no IME composition. ([`src/script/editbox/flush.rs:28`](../crates/benilla-ui/src/script/editbox/flush.rs#L28))
 - The nameplate glow is shown but never drawn, because its additive rim reads as hard edge lines in our linear-blending pipeline; the lit plate brightens its bar instead. It stays a real shown ADD region, as `glow:IsShown()` is the mouseover signal 1.12 nameplate addons read. ([`src/script/extract.rs:224`](../crates/benilla-ui/src/script/extract.rs#L224))
@@ -897,7 +902,7 @@ Each entry is the first sentence of a `Deviation:` comment, linking to where it 
 
 #### ffx_glow
 
-- Kept a float where every reference pack (`0x6cb0e2`/`0x6cb557`/`0x6cb9e1`) floors it to a byte (`x·255 + 512`, bits >> 14; `0x7ffe58`, `0x8029cc`), because the two differ by at most 0.002 (0.30 packs to 76, 0.2980). ([`src/ffx_glow.rs:179`](../crates/benilla-world/src/ffx_glow.rs#L179))
+- Kept a float where every reference pack (`0x6cb0e2`/`0x6cb557`/`0x6cb9e1`) floors it to a byte (`x·255 + 512`, bits >> 14; `0x7ffe58`, `0x8029cc`), because the two differ by at most 0.002 (0.30 packs to 76, 0.2980). ([`src/ffx_glow.rs:185`](../crates/benilla-world/src/ffx_glow.rs#L185))
 
 #### ground_fx
 

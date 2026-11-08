@@ -45,9 +45,10 @@ pub struct TexFilterSetting {
 }
 
 impl Default for TexFilterSetting {
-    /// A fresh install: `trilinear` on, as `hwDetect` sets it, and `anisotropic` off.
-    /// `$WOW_TRILINEAR` and `$WOW_ANISO` override for the session only, like `$WOW_MSAA`, so an A/B
-    /// never sticks in `config.toml`.
+    /// The registered defaults: `trilinear` off, `anisotropic` 1 (off). The start-up hardware step
+    /// (`benilla_app::hardware`, `0x639a60`) turns trilinear on from the matched row, as the
+    /// reference's own boot does; `$WOW_TRILINEAR` and `$WOW_ANISO` override for the session only,
+    /// like `$WOW_MSAA`, so an A/B never sticks in `config.toml`.
     fn default() -> Self {
         let env_flag = |k: &str| {
             std::env::var(k)
@@ -55,7 +56,7 @@ impl Default for TexFilterSetting {
                 .map(|v| !matches!(v.as_str(), "" | "0" | "off"))
         };
         Self {
-            trilinear: env_flag("WOW_TRILINEAR").unwrap_or(true),
+            trilinear: env_flag("WOW_TRILINEAR").unwrap_or(false),
             aniso: std::env::var("WOW_ANISO")
                 .ok()
                 .and_then(|v| v.parse::<u32>().ok())
@@ -121,38 +122,28 @@ pub fn tex_filter() -> TexFilterSetting {
 mod tests {
     use super::*;
 
-    /// `hwDetect`'s row-170 outcome, mode 4. `Default` is also the unpublished fallback; it reads
-    /// the env, so a set lever skips the test.
+    /// The registered pair, `trilinear` "0" and `anisotropic` "1", mode 3. The start-up hardware
+    /// step (`benilla_app::hardware`, `0x639a60`) turns trilinear on from the matched
+    /// `VideoHardware.dbc` row (mode 4) before the first frame, as the reference's own boot does;
+    /// `Default` is also the unpublished fallback and reads the env, so a set lever skips the test.
     #[test]
-    fn what_ships_is_trilinear_with_anisotropy_off() {
+    fn the_registered_default_is_mode_three() {
         if std::env::var_os("WOW_TRILINEAR").is_some() || std::env::var_os("WOW_ANISO").is_some() {
             return; // an A/B session owns the value; the levers are tested below on literals
         }
-        let shipped = TexFilterSetting::default();
-        assert!(
-            shipped.trilinear,
-            "hwDetect sets trilinear on rows 169 and 170"
-        );
+        let registered = TexFilterSetting::default();
         assert_eq!(
-            shipped.aniso, 1,
-            "anisotropic is not one of hwDetect's sixteen"
+            registered,
+            TexFilterSetting {
+                trilinear: false,
+                aniso: 1,
+            },
+            "the two registered strings alone"
         );
-        assert_eq!(shipped.mode(), 4);
-        assert_eq!(shipped.mipmap_filter(), ImageFilterMode::Linear);
-        assert_eq!(shipped.anisotropy_clamp(), 1);
-    }
-
-    /// The registered strings alone, mode 3, reached when `config.toml` or `$WOW_TRILINEAR` says 0.
-    #[test]
-    fn the_registrars_own_string_is_still_mode_three() {
-        let registrar = TexFilterSetting {
-            trilinear: false,
-            aniso: 1,
-        };
-        assert_eq!(registrar.mode(), 3);
-        assert_eq!(registrar.mipmap_filter(), ImageFilterMode::Nearest);
-        assert_eq!(registrar.gpu_mipmap_filter(), FilterMode::Nearest);
-        assert_eq!(registrar.anisotropy_clamp(), 1);
+        assert_eq!(registered.mode(), 3);
+        assert_eq!(registered.mipmap_filter(), ImageFilterMode::Nearest);
+        assert_eq!(registered.gpu_mipmap_filter(), FilterMode::Nearest);
+        assert_eq!(registered.anisotropy_clamp(), 1);
     }
 
     #[test]

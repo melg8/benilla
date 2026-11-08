@@ -313,7 +313,8 @@ impl Cvars {
         self.row(name).map(|r| r.default.as_str())
     }
 
-    #[cfg(test)]
+    /// Whether a `$WOW_…` lever owns this row for the session: it answers the lever, never the
+    /// file, and the start-up hardware step leaves it alone.
     pub(crate) fn is_session_owned(&self, name: &str) -> bool {
         self.session_owned.contains(&name.to_ascii_lowercase())
     }
@@ -846,18 +847,23 @@ const SAVE_QUIET: std::time::Duration = std::time::Duration::from_secs(1);
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct CvarLoad;
 
+/// The hardware step's place: after the config file's read and before the texture filter policy is
+/// published, because `hwDetect` writes `trilinear` and the policy is a process global frozen once.
+/// [`crate::hardware::HardwarePlugin`] puts its step here; the set is empty when that plugin is not
+/// part of the app.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct CvarHardware;
+
 pub(crate) struct CvarPlugin;
 
 impl Plugin for CvarPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Cvars>()
             .add_observer(callbacks::on_cvar_changed)
-            .add_systems(
-                Startup,
-                (load_config, publish_filter_policy)
-                    .chain()
-                    .in_set(CvarLoad),
-            )
+            .configure_sets(Startup, CvarHardware.after(CvarLoad))
+            .add_systems(Startup, load_config.in_set(CvarLoad))
+            // After the hardware step, so the policy it froze is the one the run renders at.
+            .add_systems(Startup, publish_filter_policy.after(CvarHardware))
             // After the tick, so a write no call took reaches the registry and its callbacks
             // before the frame's drains; `video::drain_restart_gx` orders after this so the commit
             // finds the stage. Before the world's input stage, so the callbacks run ahead of the
@@ -1612,12 +1618,23 @@ mod tests {
         assert_eq!(d["renderScale"], 1.0);
     }
 
-    /// The FFX pass's three switches reach it one by one (`ffx`, `ffxGlow`, `ffxDeath`).
+    /// The FFX pass's four switches reach it one by one (`ffx`, `pixelShaders`, `ffxGlow`,
+    /// `ffxDeath`).
     #[test]
     fn the_ffx_switches_reach_the_pass() {
         use benilla_world::ffx_glow::FfxSwitches;
         let mut app = cvar_app();
-        let on = FfxSwitches::default();
+        let registered = FfxSwitches::default();
+        assert_eq!(*res::<FfxSwitches>(&app), registered);
+        assert!(
+            !registered.pixel_shaders,
+            "`pixelShaders` registers \"0\"; the hardware step turns it on"
+        );
+        apply(&mut app, "pixelShaders", "1");
+        let on = FfxSwitches {
+            pixel_shaders: true,
+            ..registered
+        };
         assert_eq!(*res::<FfxSwitches>(&app), on);
         apply(&mut app, "ffxGlow", "0");
         assert_eq!(*res::<FfxSwitches>(&app), FfxSwitches { glow: false, ..on });
@@ -1762,11 +1779,11 @@ mod tests {
             res::<benilla_assets::TexFilterSetting>(&app).aniso,
             *benilla_assets::ANISO_RANGE.start()
         );
-        // The knob ships on, so only the flip to 0 proves the arm.
-        apply(&mut app, "trilinear", "0");
-        assert!(!res::<benilla_assets::TexFilterSetting>(&app).trilinear);
+        // The knob ships off (the registered `trilinear` "0"), so the flip to 1 proves the arm.
         apply(&mut app, "trilinear", "1");
         assert!(res::<benilla_assets::TexFilterSetting>(&app).trilinear);
+        apply(&mut app, "trilinear", "0");
+        assert!(!res::<benilla_assets::TexFilterSetting>(&app).trilinear);
         // Clamped to the device's ceiling too: this GPU offers 4, and wgpu refuses a count it
         // lacks.
         apply(&mut app, "gxmultisample", "99");
@@ -3640,10 +3657,6 @@ mod tests {
             (
                 "DesktopGamma",
                 "OptionsFrame.lua's Use Desktop Gamma box, recorded at open and put back on close",
-            ),
-            (
-                "pixelShaders",
-                "OptionsFrame.lua's Enable All Shaders box, which its Okay copies into `ffx`",
             ),
             ("specular", "OptionsFrame.lua's Terrain Highlights box"),
             (

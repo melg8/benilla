@@ -155,6 +155,8 @@ impl PluginGroup for GamePlugins {
             // A CVar knob too, so before CvarPlugin for the same reason.
             .add(crate::realmlist::RealmlistPlugin)
             .add(crate::cvars::CvarPlugin)
+            // After CvarPlugin: the step reads `hwDetect` once the config file has applied it.
+            .add(crate::hardware::HardwarePlugin)
             .add(crate::console::ConsolePlugin)
             .add(crate::player_commands::PlayerCommandsPlugin)
             .add(crate::world_console::WorldConsolePlugin)

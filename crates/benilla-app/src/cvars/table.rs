@@ -411,16 +411,20 @@ pub(crate) const REGISTERED: &[Registered] = &[
     // `frillDensity` (`0x68862e`: name `0x8423d8`, default `0x864644` "16", flags 1, callback
     // `0x688de0`, record `[0xc7f2f4]`): detail-doodad cells visited per chunk; the callback refuses
     // outside [1, 256] and hands the rest through `0x6725a0` to `[0xc7b494]`, the bound of the
-    // scatter loop at `0x6bfcfb`/`0x6bff1c`. One knob with `WorldDetail`. `hwDetect`
-    // (`0x639a60`) sets it from `VideoHardware.dbc` field `+0x18`, 24 on videoID 170. pfUI's
-    // `hdgraphic` reads `GetCVar("frillDensity") > 48` and writes up to 256.
+    // scatter loop at `0x6bfcfb`/`0x6bff1c`. One knob with `WorldDetail`. The start-up hardware
+    // step (`crate::hardware`, `0x639a60`) sets it from `VideoHardware.dbc` field `+0x18`, 24 on
+    // videoID 170, so a fresh install matches the reference; this registered 32 stands only on a
+    // `hwDetect "0"` install. pfUI's `hdgraphic` reads `GetCVar("frillDensity") > 48` and writes
+    // up to 256.
     deviates(
         "frillDensity",
         "32",
         "16",
-        "the reference's registered 16 is stop 0 and its post-`hwDetect` 24 is on no \
-         stop at all, so every stop diverges; Medium (32) is the nearest one no sparser than a \
-         fresh install, and erring sparse is the worse failure for ground cover",
+        "the registered default is `WorldDetail`'s Medium stop (32), while the reference registers \
+         16 and its post-`hwDetect` 24 is on no stop at all; a fresh install takes the reference's \
+         24 from the hardware step, so this default is what a `hwDetect \"0\"` install runs, and \
+         Medium is the nearest stop no sparser than 24 — erring sparse is the worse failure for \
+         ground cover",
     )
     .checked(benilla_ui::script::check_frill_density),
     // ── Combat log display ranges, in yards ──────────────────────────────────────────────────────
@@ -654,6 +658,12 @@ pub(crate) const REGISTERED: &[Registered] = &[
         "benilla's own — the reference draws its doll inside the main pass and has no \
          second view to rate-limit",
     ),
+    // `hwDetect` (`0x63a259`: name `0x864e00`, "1", flags 1, category 1, help "do hardware
+    // detection"): the start-up step runs for `-hwdetect`, a nonzero value or a hardware change,
+    // then sets the row to "0" so the next start-up keeps the CVars the callbacks stored. The step
+    // is [`crate::hardware`]; a saved "0" leaves the quality rows at what the config stored, or
+    // their registered defaults where it stored nothing.
+    same("hwDetect", "1"),
     // `gxMultisample` (`0x63a950`, flags 3). The reference formats its default from field 21 of the
     // `VideoHardware.dbc` row `DetectHardware` (`0x641260`) matches, which is 1, no multisampling,
     // on every fallback row a modern GPU reaches. The knob is [`benilla_world::view::MsaaSetting`],
@@ -682,18 +692,10 @@ pub(crate) const REGISTERED: &[Registered] = &[
     // each texture at load; the reference's UI says "enabled upon restart".
     // `$WOW_TRILINEAR`/`$WOW_ANISO` override for the session.
     //
-    // `trilinear` registers "0", but `hwDetect` runs `DetectHardware 0x641260` and sets it from the
-    // matched `VideoHardware.dbc` row before the first frame; the fallback rows an unlisted GPU
-    // reaches are 168/169/170, and 169 and 170 give 1. The reference install's `gx.log` resolves to
-    // videoID 170.
-    overridden(
-        "trilinear",
-        "1",
-        "0",
-        "`hwDetect` sets it from `VideoHardware.dbc` field 9 before the first frame, and \
-         that field is 1 on both fallback rows an unlisted modern GPU can reach — measured on the \
-         reference's own `Logs/gx.log` (`videoID: 170`)",
-    ),
+    // `trilinear` registers "0"; the start-up hardware step (`crate::hardware`) writes the matched
+    // `VideoHardware.dbc` row's field 9 before the first frame, and the fallback row an unlisted GPU
+    // reaches (videoID 170, the reference install's own `Logs/gx.log`) gives 1.
+    same("trilinear", "0"),
     // Not one of `hwDetect`'s sixteen (`[0x639a60, 0x639b80)` never reads `0xc7f2e4`), so the
     // registered "1", off, stands.
     same("anisotropic", "1").checked(benilla_ui::script::check_anisotropic),
@@ -786,23 +788,14 @@ pub(crate) const REGISTERED: &[Registered] = &[
     // record `[0xc7f2cc]`), Enable All Shaders and Terrain Highlights. Both callbacks act only on a
     // device whose caps field `[0x58a230()+0x98]` is above -1, setting bits 28 and 27 of the render
     // flags `[0xc7b2a4]`, which gate the shader negotiation `0x6941f0` for terrain, water and
-    // models; `pixelShaders` also gates the FFX pass (`0x6cd8b6`). No effect here: benilla always
-    // draws the shader leg (`liquid.wgsl` records it), and the stock Okay carries this box into
-    // `ffx`, which is wired.
-    overridden(
-        "pixelShaders",
-        "1",
-        "0",
-        "`hwDetect` (`0x639a60`) sets it from `VideoHardware.dbc` field 11 before the first frame, \
-         and that field is non-zero on fallback row 170, the one a modern GPU reaches \
-         (`Logs/gx.log`: `videoID: 170`)",
-    ),
-    overridden(
-        "specular",
-        "1",
-        "0",
-        "`hwDetect` sets it from the same field 11 as `pixelShaders`, so row 170 gives 1",
-    ),
+    // models; `pixelShaders` also gates the FFX pass (`0x6cd8b6`), which is wired through
+    // [`benilla_world::ffx_glow::FfxSwitches`]. The start-up hardware step
+    // (`crate::hardware`) writes the matched `VideoHardware.dbc` row's field 11, 1 on the fallback
+    // row a modern GPU reaches (`Logs/gx.log`: `videoID: 170`). benilla always draws the shader leg
+    // (`liquid.wgsl` records it), and the stock Okay carries this box into `ffx`.
+    same("pixelShaders", "0"),
+    // The same field, so the same row value. No effect here: benilla's terrain has no specular leg.
+    same("specular", "0"),
     // `M2UseShaders` (`0x4028e9`, name `0x82e67c`, "1") and `M2UsePixelShaders` (`0x40290c`, name
     // `0x82e644`, "0"), flags 0, no callback: their registering function reads six of its eight
     // `M2*` records at `0x40297f`-`0x4029dd` into the M2 renderer's feature word `[0xceefb0]`
