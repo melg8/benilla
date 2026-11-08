@@ -454,6 +454,21 @@ fn launch(build: BuildId, extend: Option<Extension<'_>>) -> AppExit {
         start: run_mode::start_state(),
     });
 
+    // The engine draws its lines as `Gx` primitives — the bowstring (`0x611ff0`, topology 1) and
+    // the fishing line (`0x61f780`, topology 2) — and D3D9 rasterizes a line one device pixel wide
+    // at every distance. Bevy's gizmo default is two, which is what `Gizmos` draws with; every
+    // gizmo line here is one of those reference lines.
+    app.insert_gizmo_config(
+        DefaultGizmoConfigGroup,
+        GizmoConfig {
+            line: GizmoLineConfig {
+                width: 1.0,
+                ..default()
+            },
+            ..default()
+        },
+    );
+
     // benilla-assets' loaders go into the live `AssetServer`, so they register after `AssetPlugin`.
     benilla_assets::register_asset_loaders(&mut app);
 
