@@ -27,14 +27,16 @@ struct FfxCombine {
 
 // Box4, full → ¼: four bilinear taps over a 4×4 footprint (`0xce89cc`), each clamped to 1.0 like
 // the reference's byte target; an unclamped super-white would square into a hard glow disc.
+// The reference's quad UVs carry the client's +0.5-texel offset, so its ±1.5/±0.5 taps land on
+// texel boundaries 4q+1.0 and 4q+3.0; ±1.0 from our texel-centred UVs lands on the same ones.
 @fragment
 fn fs_downsample(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     let texel = 1.0 / vec2<f32>(textureDimensions(in_tex));
     let one = vec4<f32>(1.0);
-    return (min(textureSample(in_tex, in_samp, in.uv + vec2<f32>(-1.5, -1.5) * texel), one)
-        + min(textureSample(in_tex, in_samp, in.uv + vec2<f32>(0.5, -1.5) * texel), one)
-        + min(textureSample(in_tex, in_samp, in.uv + vec2<f32>(0.5, 0.5) * texel), one)
-        + min(textureSample(in_tex, in_samp, in.uv + vec2<f32>(-1.5, 0.5) * texel), one))
+    return (min(textureSample(in_tex, in_samp, in.uv + vec2<f32>(-1.0, -1.0) * texel), one)
+        + min(textureSample(in_tex, in_samp, in.uv + vec2<f32>(1.0, -1.0) * texel), one)
+        + min(textureSample(in_tex, in_samp, in.uv + vec2<f32>(1.0, 1.0) * texel), one)
+        + min(textureSample(in_tex, in_samp, in.uv + vec2<f32>(-1.0, 1.0) * texel), one))
         * 0.25;
 }
 
