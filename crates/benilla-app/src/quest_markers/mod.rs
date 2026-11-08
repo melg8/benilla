@@ -320,29 +320,39 @@ fn build_markers(
         let built = forms.slices(&marker.handle);
         let (stat_forms, skin_forms) = (built.stat, built.skin.unwrap_or(&[]));
         for (pi, sub) in model.submeshes.iter().enumerate() {
-            // An ordinary world-lit batch: one steady material, batch order 0 (a `?` is one
+            // The marker is a child model of the unit's body, and the reference's attached
+            // instance borrows its parent's lighting record (`0x7192b0`/`0x718982`): the halo
+            // takes the unit node's sun × 2.5 lit / 0.5 MCSH-shadowed (`0x69e4ad`/`0x69e280`),
+            // never a doodad's 1.0. That byte reaches every part below the unit through
+            // `entity_shade`, so the marker dims with its wielder. Batch order 0 (a `?` is one
             // 353-vertex mesh, not a coplanar stack).
             let Some(material) = mats.steady(sub, sub.texture.clone(), 0) else {
                 continue; // no shared light buffer yet
             };
+            // `0x707680` multiplies the batch's colour alpha and transparency weight into the
+            // instance alpha; the `!` models' additive `White8x8` halo authors 0.4 there, and the
+            // tag carries it (`entities::apply_unit_mat_alpha`). Without it the halo draws opaque.
+            let alpha = sub.alpha_anim.clone();
             match &sub.billboard {
                 Some(info) => {
-                    let child = commands
-                        .spawn((
-                            Mesh3d(
-                                stat_forms
-                                    .get(pi)
-                                    .map(|(h, _)| h.clone())
-                                    .unwrap_or_default(),
-                            ),
-                            MeshMaterial3d(material),
-                            MeshTag(spawn_tag(0, 1.0)),
-                            Transform::IDENTITY,
-                            BillboardCard::new(info, Transform::IDENTITY)
-                                .with_seq_translation(seq_loop(info, ANIM_MARKER_LOW), arm_ms),
-                            MarkerCardPivot(info.pivot),
-                        ))
-                        .id();
+                    let mut card = commands.spawn((
+                        Mesh3d(
+                            stat_forms
+                                .get(pi)
+                                .map(|(h, _)| h.clone())
+                                .unwrap_or_default(),
+                        ),
+                        MeshMaterial3d(material),
+                        MeshTag(spawn_tag(0, 1.0)),
+                        Transform::IDENTITY,
+                        BillboardCard::new(info, Transform::IDENTITY)
+                            .with_seq_translation(seq_loop(info, ANIM_MARKER_LOW), arm_ms),
+                        MarkerCardPivot(info.pivot),
+                    ));
+                    if let Some(alpha) = &alpha {
+                        card.insert(benilla_world::doodad_anim::MatAnim::resting(alpha.clone()));
+                    }
+                    let child = card.id();
                     commands.entity(root).add_child(child);
                 }
                 None => {
@@ -365,6 +375,11 @@ fn build_markers(
                             Transform::IDENTITY,
                         ))
                         .id();
+                    if let Some(alpha) = &alpha {
+                        commands
+                            .entity(child)
+                            .insert(benilla_world::doodad_anim::MatAnim::resting(alpha.clone()));
+                    }
                     if let Some(h) = &host {
                         if use_rig {
                             commands
