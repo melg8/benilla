@@ -456,6 +456,14 @@
             .. "which it could only do in exclusive fullscreen. benilla applies it to the "
             .. "finished image instead, so it works in both display modes."
 
+        -- 1.12's plate gate is a fixed 20 yd from the camera's unit (`0x60f7b8`) with no row.
+        BENILLA_TOOLTIP_NAMEPLATE_DISTANCE =
+            "How far away enemy and friendly name plates are drawn, measured from your "
+            .. "character.\n\n"
+            .. "The reference client fixes this at 20 yards. The slider runs from 15 to 100 "
+            .. "yards; its last step stands for 999 yards, past the far clip's own limit, so it "
+            .. "reaches as far as the world draws."
+
         BENILLA_OPTIONS_PAGE_ROWS = {
             -- The era Controls order first; the rest follow their 1.12 box's columns.
             Controls = {
@@ -479,7 +487,7 @@
             -- Guild Names and Player Titles are children of Player Names
             -- (UIOptionsFrame.lua:703-709).
             Nameplates = {
-                "RowEnemyPlates", "RowFriendlyPlates",
+                "RowEnemyPlates", "RowFriendlyPlates", "RowPlateDistance",
                 "RowPlayerNames", "RowGuildNames", "RowPlayerTitles", "RowNpcNames", "RowOwnName",
             },
             -- 1.12's Display box by column, then Help; target-of-target sits under Status Text.
@@ -705,6 +713,12 @@
             if row.fmt == "raw" then
                 return string.format("%d", math.floor(value + 0.5))
             end
+            -- "yd": a plain yard count, the nameplate gate's reach. `topValue` makes the last
+            -- step stand for a distance past the groove's reach, as the plate row's does.
+            if row.fmt == "yd" then
+                if row.topValue and value >= row.maxv then value = row.topValue end
+                return string.format("%d yd", math.floor(value + 0.5))
+            end
             -- The clamp guards a short stops table.
             if row.stops then
                 local i = math.floor(value + 0.5) + 1
@@ -795,6 +809,8 @@
                 -- Two decimals, trailing zeros stripped: a whole value writes "1", not "1.00",
                 -- which still differs from a default registered as "1.0" and so is saved.
                 local str = string.gsub(string.format("%.2f", value), "%.?0+$", "")
+                -- The last step writes `topValue` instead: one distance past the groove's end.
+                if row.topValue and value >= row.maxv then str = string.format("%d", row.topValue) end
                 if row.deferred then
                     -- Stored on Apply; a pending equal to the committed value is dropped.
                     if str == BenillaOptionsRow_Get(row) then
@@ -2654,10 +2670,26 @@
                                             <Scripts><OnLoad>BenillaOptionsFuncRow_OnLoad(this, BenillaOptionsFrame_GetFriendlyPlates,
                                                 BenillaOptionsFrame_SetFriendlyPlates, "0", "Friendly Name Plates")</OnLoad></Scripts>
                                         </Frame>
-                                        <Frame name="$parentRowPlayerNames" inherits="BenillaOptionsCheckboxRowTemplate">
+                                        <!-- The plate gate's reach: 1.12 fixes it at 20 yd, so
+                                             the row is benilla's own, booting there. -->
+                                        <Frame name="$parentRowPlateDistance" inherits="BenillaOptionsSliderRowTemplate">
                                             <Anchors>
                                                 <Anchor point="TOPLEFT" relativeTo="$parentRowFriendlyPlates" relativePoint="BOTTOMLEFT"><Offset><AbsDimension x="0" y="-9"/></Offset></Anchor>
                                                 <Anchor point="TOPRIGHT" relativeTo="$parentRowFriendlyPlates" relativePoint="BOTTOMRIGHT"><Offset><AbsDimension x="0" y="-9"/></Offset></Anchor>
+                                            </Anchors>
+                                            <Scripts><OnLoad>
+                                                BenillaOptionsRow_OnLoad(this, "nameplateDistance", "Nameplate Distance",
+                                                    "BENILLA_TOOLTIP_NAMEPLATE_DISTANCE")
+                                                BenillaOptionsSliderRow_Setup(this, 15, 100, 1, "yd")
+                                                -- The last step stands for 999 yd: past the far
+                                                -- clip's own 777, so it is effectively unlimited.
+                                                this.topValue = 999
+                                            </OnLoad></Scripts>
+                                        </Frame>
+                                        <Frame name="$parentRowPlayerNames" inherits="BenillaOptionsCheckboxRowTemplate">
+                                            <Anchors>
+                                                <Anchor point="TOPLEFT" relativeTo="$parentRowPlateDistance" relativePoint="BOTTOMLEFT"><Offset><AbsDimension x="0" y="-9"/></Offset></Anchor>
+                                                <Anchor point="TOPRIGHT" relativeTo="$parentRowPlateDistance" relativePoint="BOTTOMRIGHT"><Offset><AbsDimension x="0" y="-9"/></Offset></Anchor>
                                             </Anchors>
                                             <Scripts><OnLoad>BenillaOptionsRow_OnLoad(this, "UnitNamePlayer", "Player Names",
                                                 "OPTION_TOOLTIP_SHOW_PLAYER_NAMES")</OnLoad></Scripts>

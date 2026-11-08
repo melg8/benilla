@@ -10,7 +10,7 @@ use benilla_protocol::{EntityKind, ObjectFields};
 use benilla_ui::script::UiScript;
 use benilla_world::view::WorldCamera;
 
-use super::{VPlateMode, VPlates};
+use super::{VPlateMode, VPlateRange, VPlates};
 use crate::names::{CreatureRecord, NameCache};
 use crate::net::{
     Embodied, Guid, GuidIndex, NetCommands, NetEntity, ObjectStore, SelfGuid, SelfPlayer,
@@ -205,6 +205,20 @@ fn plates_are_judged_around_the_camera_unit() {
         plated(&mut app).is_empty(),
         "no camera unit fails every unit (`0x60f77c`)"
     );
+}
+
+/// The gate's reach is the `nameplateDistance` knob: a unit 30 yards from our body has no plate
+/// at the reference's 20 yards, and gets one once the knob is raised past it.
+#[test]
+fn the_gate_reach_is_the_nameplate_distance_knob() {
+    let mut app = plates_app();
+    let far = unit(&mut app, mob(0x41), Vec3::new(30.0, 0.0, 0.0), &[]);
+    assert!(
+        !plated(&mut app).contains(&far),
+        "20 yards is the reference's reach"
+    );
+    app.world_mut().resource_mut::<VPlateRange>().0 = 35.0;
+    assert!(plated(&mut app).contains(&far), "35 yards reaches it");
 }
 
 /// A friendly unit whose creature type `0x605570` resolves to 11, Totem, has no plate

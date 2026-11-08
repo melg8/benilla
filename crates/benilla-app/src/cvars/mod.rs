@@ -1556,6 +1556,11 @@ mod tests {
             "the binary registers UnitNamePlayer \"1\", NPC \"0\", Own \"0\", \
              PlayerGuild \"1\", PlayerPVPTitle \"1\""
         );
+        assert_eq!(
+            d["nameplateDistance"],
+            crate::vplates::VPlateRange::default().0,
+            "the reference's own 20 yd reach"
+        );
         let camera_opts = crate::player::camera_dynamics::CameraOptions::default();
         assert_eq!(d["cameraPivot"] != 0.0, camera_opts.pivot);
         assert!(camera_opts.pivot, "the binary registers cameraPivot \"1\"");
@@ -1936,6 +1941,13 @@ mod tests {
         assert!(res::<NameConfig>(&app).own);
         apply(&mut app, "unitnameplayerpvptitle", "0");
         assert!(!res::<NameConfig>(&app).player_pvp_title);
+        apply(&mut app, "nameplateDistance", "45");
+        assert_eq!(res::<crate::vplates::VPlateRange>(&app).0, 45.0);
+        // Text that is no number reads as 0 (`SStrToFloat`), and a negative reach is held at 0.
+        apply(&mut app, "nameplatedistance", "wide");
+        assert_eq!(res::<crate::vplates::VPlateRange>(&app).0, 0.0);
+        apply(&mut app, "nameplateDistance", "-5");
+        assert_eq!(res::<crate::vplates::VPlateRange>(&app).0, 0.0);
         apply(&mut app, "ChatBubbles", "0");
         assert!(!res::<BubbleConfig>(&app).all);
         apply(&mut app, "chatbubblesparty", "0");
@@ -2890,6 +2902,7 @@ mod tests {
             .init_resource::<crate::target::TabRange>()
             .init_resource::<LootConfig>()
             .init_resource::<NameConfig>()
+            .init_resource::<crate::vplates::VPlateRange>()
             .init_resource::<ClutterConfig>()
             .init_resource::<MinimapZoom>()
             .init_resource::<BubbleConfig>()

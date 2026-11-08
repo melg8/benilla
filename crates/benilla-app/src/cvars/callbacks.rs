@@ -34,6 +34,7 @@ pub(crate) struct CvarCallbacks<'w> {
     log_periodic: Option<ResMut<'w, crate::ui_chat::combat::LogPeriodicSpells>>,
     loot: Option<ResMut<'w, crate::ui_loot::LootConfig>>,
     names: Option<ResMut<'w, crate::nameplates::NameConfig>>,
+    plate_range: Option<ResMut<'w, crate::vplates::VPlateRange>>,
     game_tip: Option<ResMut<'w, crate::game_tip::GameTipSetting>>,
     text_filter: Option<ResMut<'w, crate::text_filter::TextFilterSwitches>>,
     bubbles: Option<ResMut<'w, crate::chat_bubble::BubbleConfig>>,
@@ -95,6 +96,9 @@ impl CvarCallbacks<'_> {
         }
         if let Some(k) = self.names.as_mut() {
             crate::nameplates::on_cvar(ev, k.reborrow());
+        }
+        if let Some(k) = self.plate_range.as_mut() {
+            crate::vplates::on_cvar(ev, k.reborrow());
         }
         if let Some(k) = self.game_tip.as_mut() {
             crate::game_tip::on_cvar(ev, k.reborrow());

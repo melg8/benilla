@@ -1954,7 +1954,7 @@ fn a_broad_search_scrolls_the_page_instead_of_overflowing_it() {
     benilla_formats::wow_data_or_skip!();
     let mut s = harness_on(audio_harness());
     s.run("ShowUIPanel(BenillaOptionsFrame)").unwrap();
-    // Nameplates' six rows fit its area; Controls' sixteen overflow on their own.
+    // Nameplates' eight rows fit its area; Controls' sixteen overflow on their own.
     s.run("BenillaOptionsFrameCategoryListRowNameplates:Click()")
         .unwrap();
     settle(&mut s);
@@ -2360,9 +2360,10 @@ fn every_row_tooltip_key_resolves_in_the_real_global_strings() {
             untipped.push(row.to_string());
             continue;
         }
-        // Four rows with no fitting 1.12 string carry a `BENILLA_` one, each held to its row:
-        // Render Scale and Enable Sound in Background have no 1.12 setting, Display Mode's
-        // string describes a checkbox, and `OPTION_TOOLTIP_GAMMA` cites art this page lacks.
+        // Five rows with no fitting 1.12 string carry a `BENILLA_` one, each held to its row:
+        // Render Scale, Nameplate Distance and Enable Sound in Background have no 1.12 setting,
+        // Display Mode's string describes a checkbox, and `OPTION_TOOLTIP_GAMMA` cites art this
+        // page lacks.
         const BENILLA_OWNED: &[(&str, &str)] = &[
             ("BENILLA_TOOLTIP_RENDER_SCALE", "GraphicsRowRenderScale"),
             ("BENILLA_TOOLTIP_DISPLAY_MODE", "GraphicsRowDisplayMode"),
@@ -2371,6 +2372,10 @@ fn every_row_tooltip_key_resolves_in_the_real_global_strings() {
                 "AudioRowBackgroundSound",
             ),
             ("BENILLA_TOOLTIP_BRIGHTNESS", "GraphicsRowBrightness"),
+            (
+                "BENILLA_TOOLTIP_NAMEPLATE_DISTANCE",
+                "NameplatesRowPlateDistance",
+            ),
         ];
         if let Some((_, want_row)) = BENILLA_OWNED.iter().find(|(k, _)| *k == key) {
             assert_eq!(row, *want_row, "{row}: not this row's string");
@@ -2394,9 +2399,9 @@ fn every_row_tooltip_key_resolves_in_the_real_global_strings() {
         );
         checked += 1;
     }
-    // 84 rows less the three untipped below; four of the 81 carry a `BENILLA_` key, and a dropdown
+    // 85 rows less the three untipped below; five of the 82 carry a `BENILLA_` key, and a dropdown
     // row is checked on the key it wears at rest.
-    assert_eq!(checked, 81, "every tipped row carries a live key");
+    assert_eq!(checked, 82, "every tipped row carries a live key");
     assert_eq!(
         untipped,
         vec![
@@ -2492,8 +2497,8 @@ fn every_flavor_of_row_raises_its_plate_from_the_page_it_lives_on() {
             s.errors()
         );
     }
-    // Every tipped row: the same 81 the key census counts.
-    assert_eq!(raised, 81, "every row but Auto Loot raises a description");
+    // Every tipped row: the same 82 the key census counts.
+    assert_eq!(raised, 82, "every row but Auto Loot raises a description");
 }
 
 /// 1.12's AdvancedOptionsCombatText box as saved-global rows: a click writes the global, never a
@@ -3811,6 +3816,59 @@ fn the_max_camera_distance_slider_stores_a_factor_and_reads_out_yards() {
         "15 yd",
         "the readout follows the reset"
     );
+    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
+}
+
+/// The plate gate's reach: 1.12 fixes it at 20 yd (`0x60f7b8`), so the row boots there and reads
+/// out yards; a move writes the CVar. The groove runs 15 to 100 yd, and its last step stands for
+/// 999 yd — past the far clip, so effectively unlimited.
+#[test]
+fn the_nameplate_distance_slider_boots_at_the_reference_reach_and_reads_yards() {
+    benilla_formats::wow_data_or_skip!();
+    let mut s = harness_on(audio_harness());
+    s.run("ShowUIPanel(BenillaOptionsFrame)").unwrap();
+    s.run("BenillaOptionsFrameCategoryListRowNameplates:Click()")
+        .unwrap();
+    let value = |s: &mut UiScript| -> String {
+        s.eval::<String>(
+            "return BenillaOptionsFrameContainerBodyNameplatesRowPlateDistanceControlValue:GetText()",
+        )
+        .unwrap()
+    };
+    assert_eq!(value(&mut s), "20 yd", "the reference's fixed reach");
+
+    s.run("BenillaOptionsFrameContainerBodyNameplatesRowPlateDistanceControlSlider:SetValue(45)")
+        .unwrap();
+    assert_eq!(
+        s.take_cvar_changes(),
+        vec![("nameplateDistance".to_string(), "45".to_string())]
+    );
+    assert_eq!(value(&mut s), "45 yd");
+
+    s.run("BenillaOptionsFrameContainerBodyNameplatesRowPlateDistanceControlSlider:SetValue(10)")
+        .unwrap();
+    assert_eq!(
+        s.take_cvar_changes(),
+        vec![("nameplateDistance".to_string(), "15".to_string())],
+        "the groove starts at 15 yd"
+    );
+    assert_eq!(value(&mut s), "15 yd");
+
+    s.run("BenillaOptionsFrameContainerBodyNameplatesRowPlateDistanceControlSlider:SetValue(2000)")
+        .unwrap();
+    assert_eq!(
+        s.take_cvar_changes(),
+        vec![("nameplateDistance".to_string(), "999".to_string())],
+        "the last step writes 999 yd"
+    );
+    assert_eq!(value(&mut s), "999 yd");
+
+    // Reopening the page: the CVar's 999 lands on the groove's end and still reads 999.
+    s.run("HideUIPanel(BenillaOptionsFrame) ShowUIPanel(BenillaOptionsFrame)")
+        .unwrap();
+    s.run("BenillaOptionsFrameCategoryListRowNameplates:Click()")
+        .unwrap();
+    assert_eq!(value(&mut s), "999 yd", "999 reads back as 999, not 100");
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 

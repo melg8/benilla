@@ -7,8 +7,8 @@
 //!   one; only a unit the last render drew (`0x6704c0` at `0x60f649`, [`SceneDrawn`]); enemy or
 //!   friendly by `CanAttack` from the active player (`0x606980`), and a player subject must also
 //!   pass `CanCooperate` (equal faction-group masks); no friendly totem (`0x60f757`); 20 yd from
-//!   the camera's unit (`0x60f7b8`), and none at all when the camera's object is no unit
-//!   (`0x60f77c`); a unit not projected into view loses its plate.
+//!   the camera's unit (`0x60f7b8`, settable as `nameplateDistance`), and none at all when the
+//!   camera's object is no unit (`0x60f77c`); a unit not projected into view loses its plate.
 //! - Anchor: the overhead head point (`0x608640`) plus 2/3 yd (`[0x80abfc]`), projected every
 //!   frame (`0x483ee0`), the plate's top centre on it (`0x509ec0`), sized in gx units of the
 //!   screen diagonal (`0x41ad10`), outside uiScale. Deviation: the basis is damped past
@@ -66,6 +66,19 @@ impl VPlateMode {
             enemies: bits & PLATE_BIT_ENEMY != 0,
             friends: bits & PLATE_BIT_FRIEND != 0,
         }
+    }
+}
+
+/// How far from the camera's unit a plate may be, in yards: the reference's fixed 20 yd
+/// (`[0xc4d988]`, set from `0x5fa130`, read at `0x60f7b8`), made settable by the
+/// `nameplateDistance` row. The slider runs 15 to 100 yd, its last step standing for 999 yd —
+/// past the far clip's 777, so the top is as far as the world draws.
+#[derive(Resource, Clone, Copy, Debug)]
+pub(crate) struct VPlateRange(pub(crate) f32);
+
+impl Default for VPlateRange {
+    fn default() -> Self {
+        Self(REFERENCE_RANGE)
     }
 }
 
@@ -127,8 +140,8 @@ const SKULL_SIZE: f32 = 0.01;
 const RAID_ICON_SIZE: f32 = 0.02;
 /// `[0x80abfc]`.
 const PLATE_LIFT: f32 = 2.0 / 3.0;
-/// 20 yd squared, `[0xc4d988]` (set from `0x5fa130`).
-const MAX_DIST_SQ: f32 = 20.0 * 20.0;
+/// The reference's own reach, 20 yd, `[0xc4d988]` (set from `0x5fa130`).
+const REFERENCE_RANGE: f32 = 20.0;
 /// `CreatureType.dbc` id 11, Totem: a friendly one gets no plate (`0x60f757` `cmp eax,0xb`).
 const CREATURE_TYPE_TOTEM: u32 = 11;
 /// Deviation: the reference dims non-target plates to `0x7F`; raised because that fades them too
@@ -318,9 +331,21 @@ pub(crate) fn seat_legacy_settings(
     }
 }
 
+/// The `nameplateDistance` row's change callback: the gate's reach in yards. Text that is no
+/// number reads as 0, and a negative reach culls every plate, so it is held at 0.
+pub(crate) fn on_cvar(
+    ev: &crate::cvars::CvarChanged,
+    mut range: bevy::prelude::Mut<'_, VPlateRange>,
+) {
+    if ev.is("nameplateDistance") {
+        range.0 = ev.num().max(0.0);
+    }
+}
+
 /// The units whose spatial tests the frame's gate passed last (`0x60f600` from `0x607ef9`): the
 /// scene node drawn in the last render (`0x60f649`), not the camera's unit (`0x60f68c`), the
-/// anchor projected into view (`0x60f773`) and within 20 yards of the camera's unit (`0x60f7b8`).
+/// anchor projected into view (`0x60f773`) and within `nameplateDistance` of the camera's unit
+/// (`0x60f7b8`, 20 yards by default).
 /// The gate a packet runs ([`NamePlateLive`]) reads them as they stand, as the reference's runs
 /// over the positions and the camera the last frame left.
 #[derive(Resource, Default)]
@@ -360,6 +385,8 @@ struct PlateWorld<'w, 's> {
     targeting: Res<'w, crate::spell::SpellTargeting>,
     /// The script bits, which a plate's `OnShow` may move inside its call.
     mode: Res<'w, VPlateMode>,
+    /// The gate's reach, `nameplateDistance`.
+    range: Res<'w, VPlateRange>,
     /// The spatial verdicts this gate leaves for the packets'.
     spots: ResMut<'w, PlateSpots>,
 }
@@ -404,6 +431,7 @@ fn drive_vplates(
         // Every early return retires the plates first, or the widgets stay on screen; the reference
         // hides each live plate and returns it to the pool (`0x608a10`).
         let mode = *world.mode;
+        let max_dist_sq = world.range.0 * world.range.0;
         // The camera's object (`[cam+0x88]`), resolved with the unit mask alone (`0x60f677`): the
         // far-sight object while the camera follows one (`0x5ee483`, `0x5ee4ae`, whatever its
         // type), else our body. No camera unit (`0x60f685`), or an object that is no unit, a Far
@@ -509,7 +537,7 @@ fn drive_vplates(
                 continue;
             }
             // Measured from the camera's unit (`0x60f780`-`0x60f7b8`).
-            if (tf.translation - centre_pos).length_squared() > MAX_DIST_SQ {
+            if (tf.translation - centre_pos).length_squared() > max_dist_sq {
                 continue;
             }
             // Behind the camera or outside the viewport there is no plate: `0x60f600` destroys it
@@ -842,6 +870,7 @@ pub(crate) struct VPlatesPlugin;
 impl Plugin for VPlatesPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<VPlateMode>()
+            .init_resource::<VPlateRange>()
             .init_resource::<VPlates>()
             .init_resource::<PlateHover>()
             .init_resource::<PlateSpots>()

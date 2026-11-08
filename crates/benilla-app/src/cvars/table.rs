@@ -392,6 +392,15 @@ pub(crate) const REGISTERED: &[Registered] = &[
     // `UnitNamePlayerPVPTitle` (`0x86c668`, "1", mask bit `0x20`): the a4 rank prefix on the main
     // name line (`0x609370`), `PVP_RANK_%d_%d` through `0x5efe60`.
     same("UnitNamePlayerPVPTitle", "1"),
+    // benilla's own: how far from the camera's unit a V-key plate may be. The reference fixes the
+    // gate at 20 yd (`[0xc4d988]`, set from `0x5fa130`, read at `0x60f7b8`) and offers no setting;
+    // the spelling is a later era's. The knob is [`crate::vplates::VPlateRange`].
+    ours(
+        "nameplateDistance",
+        "20",
+        "benilla's own — the reference holds every V-key plate to 20 yd from the camera's unit \
+         (`0x60f7b8`) and never makes it settable; the spelling is a later era's",
+    ),
     // `WorldDetail` is no 1.12 CVar but the `GetWorldDetail`/`SetWorldDetail` verb name
     // (`OptionsFrame.lua:27`); stops 0/1/2 are `frillDensity` 16/32/48. `SetWorldDetail 0x488dd0`
     // also writes `SmallCull` {0.07, 0.04, 0.01}, and `GetWorldDetail` reads only `SmallCull`,
