@@ -21,6 +21,7 @@ A setting boots at the reference's default unless it is listed here (`docs/METHO
 | `gxColorBits` | `16` | `32` | these describe, they do not steer — the pair is our swapchain's own, and every format `MsaaFormats` publishes carries it |
 | `gxDepthBits` | `16` | `32` | as `gxColorBits` — the depth half of the same descriptive pair |
 | `gxResolution` | `640x480` | `1600x900` | the saved value is the WINDOWED size, as fullscreen is the borderless window over the monitor, whose size the row answers while it holds; and 640x480 is not a window anyone would ship a client at |
+| `movieSubtitle` | `0` | `1` | the reference registers it off and backs the captions with a black rectangle, which at widescreen covers the bottom of the movie picture; benilla hides that rectangle (`script::movieframe`) and the caption font's own outline keeps the text readable, so the cinematics ship subtitled |
 | `realmList` | `us.logon.worldofwarcraft.com:3724` | `localhost` | that host has not resolved since 2019, so shipping it makes every first launch a DNS failure; benilla dials the machine it is running on |
 | `SoundReverb` | `1` | `0` | the reference's reverb is EAX-over-hardware, and that hardware has not existed since Vista, so "1" would ship audio the real client has never actually produced on any machine a player runs today |
 | `weatherDensity` | `2` | `3` | every precipitation rate in `benilla-world`'s own precipitation module was derived and graded against the reference install's own apitrace captures, and that install runs `SET weatherDensity "3"` (K = 1.0) — so 3 is the value a benilla-vs-reference side-by-side is correct at, and the registered 2 would thin every rate to 0.66 against the only client we compare with. The slider is how a player takes it back down |
@@ -29,14 +30,14 @@ A setting boots at the reference's default unless it is listed here (`docs/METHO
 
 Each entry is the first sentence of a `Deviation:` comment, linking to where it lives.
 
-- [benilla-app](#benilla-app): 258
+- [benilla-app](#benilla-app): 257
 - [benilla-assets](#benilla-assets): 5
 - [benilla-blp](#benilla-blp): 1
 - [benilla-formats](#benilla-formats): 25
 - [benilla-lua](#benilla-lua): 11
 - [benilla-protocol](#benilla-protocol): 29
 - [benilla-srp](#benilla-srp): 2
-- [benilla-ui](#benilla-ui): 135
+- [benilla-ui](#benilla-ui): 137
 - [benilla-world](#benilla-world): 47
 
 ### benilla-app
@@ -220,12 +221,11 @@ Each entry is the first sentence of a `Deviation:` comment, linking to where it 
 #### portrait
 
 - The auction house's `AuctionDressUpModel` draws the same one assembly, because the app's `TryOn`/`Dress` intents are not per-widget; the reference's two widgets each clone their own model. ([`src/portrait/dressup.rs:8`](../crates/benilla-app/src/portrait/dressup.rs#L8))
-- A fixed neutral front-lit studio (`studio_light`) replaces the portrait bake's hard-coded rig (`0x525b10`: ambient 0.45 grey, white directional), because the studio is the look chosen for them. ([`src/portrait/light.rs:65`](../crates/benilla-app/src/portrait/light.rs#L65))
-- The round portraits bake at 256², not 64², because the 64² still is a resolution limit, not a look; and under benilla's studio light (`light::BoothLight`), the chosen portrait look, in place of the reference's own fixed rig (`0x525b10`, pushed at `0x52562e`: a 0.45 grey ambient and a white directional). ([`src/portrait/mod.rs:18`](../crates/benilla-app/src/portrait/mod.rs#L18))
-- Only the four party slots hand over, capped at `Self::CAP`, instead of every portrait until `ClientDestroyGame` (`0x401ee0`), because a general cache would pay a texture per unit ever seen. ([`src/portrait/mod.rs:265`](../crates/benilla-app/src/portrait/mod.rs#L265))
-- This reads the window's aspect, not `gxResolution`'s, because the window here takes any shape a drag gives it, where the reference's keeps `gxResolution`'s (`0x5989d7`). In fullscreen the window is the screen in logical pixels and `gxResolution` the screen in device pixels, so their aspects agree and their sizes need not. ([`src/portrait/mod.rs:694`](../crates/benilla-app/src/portrait/mod.rs#L694))
-- `boothHalfRate` is benilla's own CVar, because the reference draws its doll in the main pass and has no second view; a full-rate pass costs up to 7.6 ms a frame at 4K. ([`src/portrait/mod.rs:733`](../crates/benilla-app/src/portrait/mod.rs#L733))
-- The reference widget draws only its model; a body pane clears to near-black, the chosen look where nothing sits behind the pane. ([`src/portrait/mod.rs:999`](../crates/benilla-app/src/portrait/mod.rs#L999))
+- The round portraits bake at 256², not 64², because the 64² still is a resolution limit, not a look. Their light is the reference's own fixed rig (`0x525b10`, pushed at `0x52562e`: a 0.45 grey ambient and a white directional along (-1, 0, -1)). ([`src/portrait/mod.rs:18`](../crates/benilla-app/src/portrait/mod.rs#L18))
+- Only the four party slots hand over, capped at `Self::CAP`, instead of every portrait until `ClientDestroyGame` (`0x401ee0`), because a general cache would pay a texture per unit ever seen. ([`src/portrait/mod.rs:264`](../crates/benilla-app/src/portrait/mod.rs#L264))
+- This reads the window's aspect, not `gxResolution`'s, because the window here takes any shape a drag gives it, where the reference's keeps `gxResolution`'s (`0x5989d7`). In fullscreen the window is the screen in logical pixels and `gxResolution` the screen in device pixels, so their aspects agree and their sizes need not. ([`src/portrait/mod.rs:693`](../crates/benilla-app/src/portrait/mod.rs#L693))
+- `boothHalfRate` is benilla's own CVar, because the reference draws its doll in the main pass and has no second view; a full-rate pass costs up to 7.6 ms a frame at 4K. ([`src/portrait/mod.rs:732`](../crates/benilla-app/src/portrait/mod.rs#L732))
+- The reference widget draws only its model; a body pane clears to near-black, the chosen look where nothing sits behind the pane. ([`src/portrait/mod.rs:998`](../crates/benilla-app/src/portrait/mod.rs#L998))
 
 #### quest_markers
 
@@ -794,6 +794,8 @@ Each entry is the first sentence of a `Deviation:` comment, linking to where it 
 - The client's Lua has no such bound, as nothing sets a hook (`lua_sethook`, `0x6fba40`, has no caller and no pointer to it), so a load that never ends hangs it; benilla bounds it because a hung load would otherwise freeze the loading screen instead of reporting. ([`src/script/mod.rs:957`](../crates/benilla-ui/src/script/mod.rs#L957))
 - The reference sets the cells only when glue or the interface is built, `0x41ad10` from `0x46a828` (`0x46a7b0`) and `0x48fe2b` (`0x48fbf0`), and a resize reaches them only through the rebuild it asks for. In glue `0x46abe0` sets the rebuild flag `0xb41d8c` when the aspect moves by 0.01 or more (`fcomp` at `0x46ac66`); in game `0x492e90` reloads the interface (`0x491380`) past 0.001 (`0x492f26`, `0x492f31`). The gate and the rebuild both take the aspect from `gxResolution` (`0x46ab40`, `0x4901e0`; 4/3 while `widescreen` is off), never the live window. Here every resize sets the cells from the window, because the UI is kept live across a resize. A dragged frame with no layout-cache row (unnamed, or `SetUserPlaced(false)`) keeps its drag pin in layout units, where the rebuild would put it back where its script places it. ([`src/script/mod.rs:1046`](../crates/benilla-ui/src/script/mod.rs#L1046))
 - A path that does not resolve is stored, where the reference raises `Invalid model file: %s` (`0x878b44`), because the file loads asynchronously here and the call cannot know yet. ([`src/script/modelframe.rs:333`](../crates/benilla-ui/src/script/modelframe.rs#L333))
+- The stock area is pinned 630 units from the top and the caption is centred in it (~674–724), because it is sized for a 4:3 picture, while the picture's bottom edge moves with the aspect (`MovieScreen::quad`): at 4:3 it ends above the text, at 16:9 it crosses it (the first line over the picture, the second on black), and past ~2.21:1 it fills the root. Here the block is placed as a whole: bottom-aligned when the black band below the picture holds it, else lifted clear of the edge. ([`src/script/movieframe.rs:293`](../crates/benilla-ui/src/script/movieframe.rs#L293))
+- `MovieFrame.xml` anchors `MovieFrameSubtitleArea`'s 800×138 black texture 630 units from the top of the 768-unit glue root and no script hides it, because at 4:3 the movie's picture ends above it: its bitmap's last rows are black padding (`MovieBitmap::picture_row`), so the texture is invisible. At widescreen the picture grows by the scaled aspect (`MovieScreen::quad`) to ~725 units, and the always-shown backdrop (OVERLAY) paints a black bar over the picture's bottom (ARTWORK). Hiding it leaves the text over the picture, so its stock `GlueFontNormalHuge` NORMAL outline becomes THICK (its shadow stays) to keep it readable. A UI with no such regions is untouched. ([`src/script/movieframe.rs:324`](../crates/benilla-ui/src/script/movieframe.rs#L324))
 - The reference's free list is FIFO (`0x6087f0`, `0x608a5a`); either keeps every index stable, all an addon can observe of the pool's order. ([`src/script/nameplate.rs:807`](../crates/benilla-ui/src/script/nameplate.rs#L807))
 - The reference adds this rim over the bar; we brighten the bar (`LIT_BOOST`), because the rim reads as hard edge lines in our linear-blending pipeline. The art has no alpha and is mostly black, so as BLEND it would be an opaque box. ([`src/script/nameplate.rs:1430`](../crates/benilla-ui/src/script/nameplate.rs#L1430))
 - A wrapper that decodes to no live widget takes `default_parent`, because the reference, with no `IsA` check, reads a wild pointer. ([`src/script/object/anchor_args.rs:218`](../crates/benilla-ui/src/script/object/anchor_args.rs#L218))
@@ -895,7 +897,7 @@ Each entry is the first sentence of a `Deviation:` comment, linking to where it 
 
 #### ffx_glow
 
-- Kept a float where every reference pack (`0x6cb0e2`/`0x6cb557`/`0x6cb9e1`) floors it to a byte (`x·255 + 512`, bits >> 14; `0x7ffe58`, `0x8029cc`), because the two differ by at most 0.002 (0.30 packs to 76, 0.2980). ([`src/ffx_glow.rs:176`](../crates/benilla-world/src/ffx_glow.rs#L176))
+- Kept a float where every reference pack (`0x6cb0e2`/`0x6cb557`/`0x6cb9e1`) floors it to a byte (`x·255 + 512`, bits >> 14; `0x7ffe58`, `0x8029cc`), because the two differ by at most 0.002 (0.30 packs to 76, 0.2980). ([`src/ffx_glow.rs:179`](../crates/benilla-world/src/ffx_glow.rs#L179))
 
 #### ground_fx
 

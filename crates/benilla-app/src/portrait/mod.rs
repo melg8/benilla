@@ -16,9 +16,8 @@
 //! [`frame`]. The bake is a fresh instance frozen at Stand (`0x707400`, `0x7121a0`).
 //!
 //! Deviation: the round portraits bake at 256², not 64², because the 64² still is a resolution
-//! limit, not a look; and under benilla's studio light (`light::BoothLight`), the chosen portrait
-//! look, in place of the reference's own fixed rig (`0x525b10`, pushed at `0x52562e`: a 0.45 grey
-//! ambient and a white directional).
+//! limit, not a look. Their light is the reference's own fixed rig (`0x525b10`, pushed at
+//! `0x52562e`: a 0.45 grey ambient and a white directional along (-1, 0, -1)).
 //!
 //! The frozen Stand phase is t=0; the reference's sampling clock is untraced.
 //!
@@ -1002,7 +1001,7 @@ fn setup_booths(
                 ..default()
             },
             RenderTarget::Image(image.clone().into()),
-            // The FFXGlow combine owns the one gamma decode, at world parity.
+            // The FFXGlow combine owns the one gamma decode; a portrait bake never glows.
             benilla_world::ffx_glow::FfxGlow::BOOTH,
             Projection::from(PerspectiveProjection {
                 fov: PORTRAIT_FOV,
@@ -1468,7 +1467,7 @@ fn sync_portraits(
                 .map(|p| BoothPart {
                     skinned: p.skinned_mesh.clone(),
                     static_mesh: p.static_mesh.clone(),
-                    material: booth_light.studio.variant(&p.material, &mut wow_mats),
+                    material: booth_light.studio.variant_rig(&p.material, &mut wow_mats),
                     // `None`: a mirrored part does not carry the batch's alpha loops.
                     alpha_anim: None,
                     twins: BoothTwins::default(),
@@ -1479,7 +1478,7 @@ fn sync_portraits(
                 .iter()
                 .map(|r| BoothRider {
                     mesh: r.static_mesh.clone(),
-                    material: booth_light.studio.variant(&r.material, &mut wow_mats),
+                    material: booth_light.studio.variant_rig(&r.material, &mut wow_mats),
                     bone: r.bone,
                     offset: r.offset,
                     twins: BoothTwins::default(),
@@ -1490,7 +1489,7 @@ fn sync_portraits(
                 .iter()
                 .map(|b| BoothBillboardSpec {
                     mesh: b.mesh.clone(),
-                    material: booth_light.studio.variant(&b.material, &mut wow_mats),
+                    material: booth_light.studio.variant_rig(&b.material, &mut wow_mats),
                     bone: b.bone,
                     offset: b.seat.offset(),
                     kind: b.kind,

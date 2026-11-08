@@ -17,7 +17,11 @@ use benilla_assets::materials::WowModelMaterial;
 pub(super) struct BoothRig {
     pub(super) buffer: Option<bevy::render::render_resource::Buffer>,
     variants: HashMap<AssetId<WowModelMaterial>, Handle<WowModelMaterial>>,
-    /// Set by [`Self::variant`] when the source material was not resident yet.
+    /// The round portraits' twins, on [`VariantLane::RigUnfogged`]: a twin's lane is fixed, so
+    /// a source a booth also uses on the world lane needs a twin of each.
+    rig_variants: HashMap<AssetId<WowModelMaterial>, Handle<WowModelMaterial>>,
+    /// Set by [`Self::variant`] or [`Self::variant_rig`] when the source material was not
+    /// resident yet.
     unready: bool,
 }
 
@@ -59,12 +63,40 @@ impl BoothRig {
     pub(super) fn take_unready(&mut self) -> bool {
         std::mem::take(&mut self.unready)
     }
+
+    /// The round portrait twin of a world material, on the authored-rig lane: its lights are the
+    /// booth's [`studio_light`] probe (the reference's `PortraitLighting`, `0x525b10`), not the
+    /// world's entity lobe with its 2.5 intensity. Fog off, as the bake scene has none.
+    pub(super) fn variant_rig(
+        &mut self,
+        world: &Handle<WowModelMaterial>,
+        materials: &mut Assets<WowModelMaterial>,
+    ) -> Handle<WowModelMaterial> {
+        let Some(buffer) = self.buffer.clone() else {
+            if super::booth_log() {
+                eprintln!("[booth] variant NO-BUFFER -> world lane (unlit in a booth)");
+            }
+            return world.clone();
+        };
+        match material_variant(
+            &mut self.rig_variants,
+            &buffer,
+            world,
+            materials,
+            VariantLane::RigUnfogged,
+        ) {
+            Some(twin) => twin,
+            None => {
+                self.unready = true;
+                world.clone()
+            }
+        }
+    }
 }
 
 /// The booths' light, with its own variant cache since a twin points at one buffer.
-/// [`Self::studio`] lights the round unit-frame portraits. Deviation: a fixed neutral front-lit
-/// studio ([`studio_light`]) replaces the portrait bake's hard-coded rig (`0x525b10`: ambient 0.45
-/// grey, white directional), because the studio is the look chosen for them.
+/// [`Self::studio`] lights the round unit-frame portraits with the reference's own fixed rig
+/// (`0x525b10`): a 0.45 grey ambient and a white directional, no fog, no world time of day.
 #[derive(Resource, Default)]
 pub(super) struct BoothLight {
     pub(super) studio: BoothRig,
@@ -79,6 +111,7 @@ pub(super) fn reap_dead_variants(
     for ev in events.read() {
         if let AssetEvent::Removed { id } = ev {
             booths.studio.variants.remove(id);
+            booths.studio.rig_variants.remove(id);
         }
     }
 }
@@ -131,34 +164,52 @@ pub(crate) fn material_variant(
     Some(handle)
 }
 
-/// The round portraits' studio light: neutral warm-white ambient and diffuse, the sun from the
-/// camera's three-quarter side so the face shown is lit, fog and point lights off. The layout comes
-/// from the scene's own packer ([`LightBlob`]); only the values live here.
+/// The round portraits' light, the reference's `PortraitLighting` (`0x525b10`): a 0.45 grey
+/// ambient and a white directional whose WoW-space travel is `(-1, 0, -1)`, on the `Model2.bls`
+/// SH lane the booth's rig materials read. Point lights and fog off; the bake scene has none.
 pub(super) fn studio_light() -> LightBlob {
-    // −sun_dir is the to-light vector: toward the camera side (−Z, a bit of −X from the yaw, up).
-    let sun_dir = Vec3::new(0.25, -0.45, 0.85).normalize();
-    // Fog and the SIDN night lane stay at the builder's off-world defaults; no shader reads 19.w.
-    LightBlob::model(
-        [0.58, 0.56, 0.54], // studio ambient, neutral warm-white
-        [0.85, 0.82, 0.78], // studio diffuse
-        sun_dir,
-    )
-    .dial(0.4)
+    const AMBIENT: [f32; 3] = [0.45; 3];
+    const DIFFUSE: [f32; 3] = [1.0; 3];
+    // `0x525b1f` stores 0.45 three times for the ambient; `0x525b43`/`0x525b51`/`0x525b58` store
+    // the direction `(-1, 0, -1)` and the colour `(1, 1, 1)` in WoW axes. The travel direction maps
+    // through `wow_to_bevy` (X north, Y west, Z up) to the booth's space.
+    let sun_dir = benilla_assets::coords::wow_to_bevy([-1.0, 0.0, -1.0]);
+    LightBlob::model(AMBIENT, DIFFUSE, sun_dir)
+        // The rig lane reads probe slot 0: the same two lights, ambient in the DC term and the
+        // directional as one toward-light lobe.
+        .probe(AMBIENT, &[(-sun_dir, DIFFUSE)])
+        // Fog and the SIDN night lane stay at the builder's off-world defaults; no shader reads
+        // 19.w (the booths' exterior dial is 0.4).
+        .dial(0.4)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// The studio light keys from the camera's side.
+    /// The studio rig is the reference's (`0x525b10`): 0.45 grey ambient and a white directional
+    /// travelling `(-1, 0, -1)` in WoW axes, so its toward-light is up and from the camera side.
     #[test]
-    fn studio_light_keys_from_the_camera_side() {
+    fn studio_light_is_the_portrait_rig() {
         let blob = studio_light();
         let rows = blob.header_rows();
-        let to_light = -Vec3::from_slice(&rows[2][..3]);
+        assert_eq!(rows[0][..3], [0.45; 3], "ambient");
+        assert_eq!(rows[1][..3], [1.0; 3], "diffuse");
+        // The header stores the travel direction as given; the shader normalizes it.
+        let to_light = (-Vec3::from_slice(&rows[2][..3])).normalize();
+        let want = Vec3::new(0.0, 1.0, -1.0).normalize();
         assert!(
-            to_light.z < -0.5,
-            "the studio key points back toward the camera (−Z): {to_light:?}"
+            (to_light - want).length() < 1e-5,
+            "the key is up and toward the camera: {to_light:?}"
+        );
+        // The rig also folds the same two lights into probe slot 0, which the rig lane reads: the
+        // DC is the 0.45 ambient plus the lobe's constant `(4/17)·(0.375 + 0.9375·(uₓ² + u_y²))`,
+        // `u = (0, 1/√2, −1/√2)`.
+        let want_dc = 0.45 + (4.0 / 17.0) * (0.375 + 0.9375 * 0.5);
+        let dc = blob.probe_dc();
+        assert!(
+            dc.iter().all(|c| (c - want_dc).abs() < 1e-5),
+            "the rig lane's probe DC: {dc:?}"
         );
     }
 }

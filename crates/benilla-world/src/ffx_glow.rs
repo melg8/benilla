@@ -36,7 +36,8 @@ pub struct FfxGlow {
     /// The per-view multiplier on the zone glow weight; `0.0` keeps the decode, drops the glow.
     pub(crate) gain_scale: f32,
     /// Which FFX pass pair this view runs, and so what drives the combine's death gate `y` and
-    /// haze `z`. The zone glow is scene data, outside it, so a bake keeps it.
+    /// haze `z`. The glow weight is separate: each view's own `gain_scale` sets it, and a bake
+    /// that stands outside the WorldFrame's pass sets it to zero.
     pub(crate) state: FfxState,
 }
 
@@ -70,10 +71,12 @@ impl FfxGlow {
         gain_scale: 1.0,
         state: FfxState::Glue,
     };
-    /// A portrait bake: the zone glow at world parity and no player-state pass, so a ghost's
-    /// portrait keeps its living face and a drunk player's unit frame stays sharp.
+    /// A portrait bake: decode only, no glow. The reference's unit-frame bake (`0x524f60`) copies
+    /// its pixels out of the framebuffer (`0x58acd0`/`0x449bf0`), outside the WorldFrame paint
+    /// that runs the FFX pass (`0x6cd890`/`0x6cda70`), so a portrait never glows and a ghost's
+    /// portrait keeps its living face.
     pub const BOOTH: Self = Self {
-        gain_scale: 1.0,
+        gain_scale: 0.0,
         state: FfxState::None,
     };
     /// Decode only, no glow: a bake standing in for a UI model widget (a `<PlayerModel>` pane),
@@ -1243,13 +1246,14 @@ mod tests {
         }
         assert_eq!(FfxGlow::WORLD.state, FfxState::Player);
         assert_eq!(FfxGlow::GLUE_SCENE.state, FfxState::Glue);
-        // A bake still glows like the world.
-        assert_eq!(FfxGlow::BOOTH.gain_scale, 1.0);
+        // A bake never glows: the reference's portrait bake copies its pixels outside the
+        // WorldFrame paint that runs the FFX pass.
+        assert_eq!(FfxGlow::BOOTH.gain_scale, 0.0);
         assert_eq!(FfxGlow::GLUE_SCENE.gain_scale, 1.0);
         assert_eq!(FfxGlow::UI_PANE.gain_scale, 0.0);
     }
 
-    /// Death-combined, a ghost's portrait would bake steel-blue; the zone glow still reaches it.
+    /// Death-combined, a ghost's portrait would bake steel-blue; the zone glow never reaches it.
     #[test]
     fn a_ghosts_bake_is_not_death_combined() {
         let zone = 0.5;
@@ -1271,8 +1275,8 @@ mod tests {
                 &FfxGlow::BOOTH,
                 FfxWave::default()
             ),
-            [0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            "the booth keeps the zone glow and drops the death gate"
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            "the booth drops the zone glow and the death gate"
         );
         assert_eq!(
             combine_uniform(
@@ -1307,7 +1311,7 @@ mod tests {
                 &FfxGlow::BOOTH,
                 FfxWave::default()
             ),
-            [0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         );
     }
 
